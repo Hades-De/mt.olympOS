@@ -11,7 +11,7 @@ SegmentedRegClear:
 
 
 reset_64bit:
-    mov eax, 0x00000000
+    xor eax, eax
     mov ebx, eax
     iret
 
