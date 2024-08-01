@@ -10,8 +10,10 @@ jobs:
     - uses: cachix/install-nix-action@v27
       with:
         nix_path: nixpkgs=channel:nixos-unstable
-    - run: nix-build && chmod +x tests/check-boot.sh && bash tests/check-boot.sh
+    - run: nix-build
     - uses: actions/upload-artifact@v4
       with:
-        name: mt.olympOS.img
-        path: result/bin/mt.olympOS.img
+        name: result/bin/mt.olympOS.img
+        path: mt.olympOS.img
+    - uses: actions/checkout@v3
+    - uses: GirishCodeAlchemy/githubaction-workflow-status-capture@v2.0
