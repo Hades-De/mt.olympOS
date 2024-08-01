@@ -1,3 +1,8 @@
+# binaries
+
+you can download precompiled binaries from the newest github action 
+
+
 # Building
 
 you just install the nix or lix package manager and run this command `nix-build`
