@@ -10,7 +10,7 @@ jobs:
     - uses: cachix/install-nix-action@v27
       with:
         nix_path: nixpkgs=channel:nixos-unstable
-    - run: nix-build
+    - run: nix-build && chmod +x tests/check-boot.sh && bash tests/check-boot.sh
     - uses: actions/upload-artifact@v4
       with:
         name: btl1.asm
