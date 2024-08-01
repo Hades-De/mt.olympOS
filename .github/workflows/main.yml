@@ -13,5 +13,5 @@ jobs:
     - run: nix-build && chmod +x tests/check-boot.sh && bash tests/check-boot.sh
     - uses: actions/upload-artifact@v4
       with:
-        name: btl1.asm
-        path: mt.olympOS.img
+        name: mt.olympOS.img
+        path: result/bin/mt.olympOS.img
