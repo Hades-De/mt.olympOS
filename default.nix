@@ -3,7 +3,7 @@ with import <nixpkgs> { };
 stdenv.mkDerivation {
   name = "mt.olympOS";
   src = ./src;
-  buildInputs = [ nasm ];
+  buildInputs = [ nasm file ];
   buildPhase = "nasm -f bin btl1.asm -o mt.olympOS.img";
 
   installPhase = ''
