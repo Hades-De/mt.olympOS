@@ -13,7 +13,7 @@ jobs:
     - run: nix-build
     - uses: actions/upload-artifact@v4
       with:
-        name: result/bin/mt.olympOS.img
-        path: mt.olympOS.img
+        name: mt.olympOS.img
+        path: result/bin/mt.olympOS.img
     - uses: actions/checkout@v3
     - uses: GirishCodeAlchemy/githubaction-workflow-status-capture@v2.0
