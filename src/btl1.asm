@@ -20,7 +20,7 @@ DiskLoad:
     mov bx, 0x7E00
     int 0x13
     jc DiskLoad
-    jnc 0x7E00
+    jmp 0x7E00:0000
 
 times 510-($-$$) db 0
 db 0x55, 0xaa
