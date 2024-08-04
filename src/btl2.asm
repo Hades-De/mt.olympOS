@@ -1,8 +1,23 @@
 [org 0x7E00]
 
+data:
+    free_mem1 dd 0
+    Res_mem1 dd 1
+    Res_mem2 dd 2
+    free_mem2 dd 3
+    Res_mem3 dd 4
+;;other code
     mov ah, 0x0E  
     mov al, 'T'   
     int 0x10
+
+lowermemcheck:
+    clc
+    int 0x12
+    jc wrong_memory ;;carry flag is set when its not detected, but it should be
+    cmp ax, 640 ;;ax contains the amount of RAM in kb, starting from 0, "640kb outta be enough for anybody"
+    je pre_memoryMap
+
 
 SegmentedRegClear:
     mov ax, 0x0000
@@ -11,12 +26,14 @@ SegmentedRegClear:
 
 
 reset_64bit:
-    xor eax, eax
+    clc
+    xor eax,eax
     mov ebx, eax
     iret
 
 pre_memoryMap:
     push eax ;;pushes whatever its doing onto the stack
+    xor eax, eax
     xor dh, dh
     mov es, ax ;;copies 0x0000 onto es
     mov di, 0x8000 ;;memory map buss
@@ -32,12 +49,29 @@ memoryMap:
     jne wrong_memory
     jc wrong_memory ;; "carryflag", 0 ;;if successfull continue, if not whoomp whoomp
     cmp ebx, 0 ;;ebx should be bigger than zero if its zero, we are done reading the list
-    ;;je exit point
+    jl sort_mMap
+    je GTD_start
     add di, cx
     jmp memoryMap
     ;;memory map begins at 0x00008000
 
-
+sort_mMap:
+    mov [free_mem1], ecx
+    cmp ecx, [free_mem1]
+    je memoryMap
+    mov [Res_mem1], ecx
+    cmp ecx, [Res_mem1]
+    je memoryMap
+    mov [Res_mem2], ecx
+    cmp ecx, [Res_mem2]
+    je memoryMap
+    mov [free_mem2], ecx
+    cmp ecx, [free_mem2]
+    je memoryMap
+    mov [Res_mem3], ecx
+    cmp ecx, [Res_mem3]
+    je memoryMap    
+    ;;add code here to sort the memory map
 
 ckinput:
     push eax
