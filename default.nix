@@ -9,6 +9,6 @@ stdenv.mkDerivation {
 
   installPhase = ''
     mkdir -p $out/bin
-    cp mt.olympOS.img $out/bin/disk.img
+    cp mt.olympOS.img $out/bin/
   '';
 }
