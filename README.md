@@ -14,7 +14,6 @@ there is an way to check if the image is bootable without qemu, just enter the n
 
 
 <!-- START_ACTIONS_TABLE -->
-
 | Workflow | Build Status |
 |----------|--------------|
 | [CI](.github/workflows/default.yml) | [![CI](https://github.com/mrtuxa/mt.olympOS/actions/workflows/default.yml/badge.svg)](https://github.com/mrtuxa/mt.olympOS/actions/workflows/default.yml) |
