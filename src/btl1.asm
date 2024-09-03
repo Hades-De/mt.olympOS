@@ -13,7 +13,7 @@ lowermemcheck:
     xor ax, ax
     int 0x12
     cmp ax, 639 ;; ax contains the amount of RAM in kb, starting from 0, "640kb outta be enough for anybody"
-    jne DiskLoad16b
+    jne DiskLoadN16b
 
 DiskLoad16b:
     ;something to boot the 16bit Kernel and shoud make it so that it jumps to mem error if less than 100kb of ram cuz i aint messing with that (yet :troll:)
