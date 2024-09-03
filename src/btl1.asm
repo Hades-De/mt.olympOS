@@ -13,9 +13,12 @@ lowermemcheck:
     xor ax, ax
     int 0x12
     cmp ax, 639 ;; ax contains the amount of RAM in kb, starting from 0, "640kb outta be enough for anybody"
-    jne mem_error
+    jne DiskLoad16b
 
-DiskLoad:
+DiskLoad16b:
+    ;something to boot the 16bit Kernel and shoud make it so that it jumps to mem error if less than 100kb of ram cuz i aint messing with that (yet :troll:)
+
+DiskLoadN16b:
     cld
     mov si, 0        ; Sector index
     mov dl, 0x80     ; Drive number (default hard disk)
