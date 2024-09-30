@@ -6,16 +6,16 @@ SegmentedReg:
     mov ds, ax
     mov es, ax
     mov ss, ax
-    mov ax, 0x7E00
-    mov es, ax
-    mov esp, 0x105000
+    ;;mov ax, 0x7E00 ;;unused line for now, will be deleted, same with es, ax
+    ;;mov es, ax
+    mov esp, 0x0500
 
 lowermemcheck:
     clc
     xor ax, ax
     int 0x12
-    cmp ax, 639 ;; ax contains the amount of RAM in kb, starting from 0, "640kb outta be enough for anybody"
-    jne mem_error
+    cmp ax, 639;; ax contains the amount of RAM in kb, starting from 0, "640kb outta be enough for anybody"
+    jb mem_error
 clc
 
 stacetc:
@@ -75,8 +75,10 @@ highmemchk:
             
             done: ;;it seems that i cant "mov al, [bx]"
                 clc
+                xor dx, dx ;;we can now clear dx because it has no relevant data right now
+                mov dx, 0
                 mov ah, 0x0E
-                mov bx, HMD
+                mov bx, HMD ;;moves the string into bx
                 jmp print_string_SRT
 
 print_string_SRT:
@@ -94,16 +96,17 @@ mem_error_eax:
     jmp print_string_SRT
 
 end:
-    mov ah, 0x0E  
-    mov al, 's'  
-    int 0x10
+    cmp dx, 1
+    je sort_mem_list
     jmp $
 
-DEE db "invalid disk inserted",0
-MEL db "lower memory error",0
-MEE db "upper memory check failed EAX", 0
-MBF db "memory buffer is full",0
-HMD db "higher memory reading done", 0
+sort_mem_list:
+    ;;first display the number in CX (current amount of space in the stack)
+    ;;then sort the memory list that we got from using int 0x15
+    ;;pass that info to possibly the kernel and/or the second stage
+    ;;also some code to parse binary/hex into decimal (possibly using an ascii table)
+
+
 DiskLoad16b:
     ;something to boot the 16bit Kernel and shoud make it so that it jumps to mem error if less than 100kb of ram cuz i aint messing with that (yet :troll:)
 
@@ -120,6 +123,14 @@ disk_error:
     mov ah, 0x0E
     mov bx, DEE
     jmp print_string_SRT
+
+
+text:
+    DEE db "invalid disk inserted", 0
+    MEL db "lower memory error", 0
+    MEE db "upper memory check failed EAX", 0
+    MBF db "memory buffer is full", 0
+    HMD db "higher memory reading done", 0
 
 times 510-($-$$) db 0
 db 0x55, 0xaa
