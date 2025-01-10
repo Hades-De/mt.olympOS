@@ -1,21 +1,24 @@
 [org  0x7C00]
 clc
 SegmentedReg:
+    mov [0x7e10], dl
     xor ax, ax 
     mov ds, ax
     mov es, ax
     mov ss, ax
     mov esp, 0x0500
 
+    ;;things to still add:
+    ;detection if the system is already installed
+    ;a way to IO with Potential video cards/ other pcie cards
+    ;possibly internet connection? but first kernel and GUI
+
 stack_setup: ;; planning to use  0x7F00 to 0x7FFF thus 255 spaces and we'll store space left at 0x7EFE
     ;;we will assume everything pushed onto the stack is 16bits
     ;;cx is the volume counter
     ;;ax is used as a pushing variable
     mov sp, 0x7FFF
-    mov cx, 256
-    mov [0x7EFE], cx
-    xor cx, cx
-
+    mov word [0x7EFE], 256
 
 lowermemcheck:
     clc
@@ -140,14 +143,12 @@ convert_to_base10:
 sort_mem_list:
     jmp $
         
-
     ;; you rotate 1 bit into the first 16 bits, then subtract, if carry flag is set, fail. if not, yippie, then check if it has been 16 times
     ;;the main idea behind converting binary to base 10 is to divide by 10, video about it will be linked soon:tm:. It should be a ben eater video
     ;;first display the number in CX (current amount of space in the stack)
     ;;then sort the memory list that we got from using int 0x15
     ;;pass that info to possibly the kernel and/or the second stage
     ;;also some code to parse binary/hex into decimal (possibly using an ascii table)
-
 
 DiskLoad16b:
     ;something to boot the 16bit Kernel and shoud make it so that it jumps to mem error if less than 100kb of ram cuz i aint messing with that (yet :troll:)
@@ -157,22 +158,14 @@ DiskLoad16b:
     ;;mov si, 0        ; Sector index
 jmp $
 add_to_stack:
-    mov [0x7EFD], cx
-    mov cx, [0x7EFE]
-    sub cx, 2
+    sub word [0x7EFE], 2
     jc stack_full
-    mov [0x7EFE], cx
-    mov cx, [0x7EFD]
     ret
 
 remove_from_stack:
-    mov [0x7EFD], cx
-    mov cx, [0x7EFE]
-    add cx, 2
-    cmp cx, 256
+    add word [0x7EFE], 2
+    cmp word [0x7EFE], 256
     jg stack_empty
-    mov [0x7EFE], cx
-    mov cx, [0x7EFD]
     ret
    
 mem_error:
@@ -194,7 +187,6 @@ stack_full:
     mov ah, 0x0E
     mov bx, SF
     jmp print_string_SRT
-
 
 text:
     SE db "stack is empty!", 0
