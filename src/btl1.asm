@@ -1,13 +1,15 @@
 [org  0x7C00]
 clc
 SegmentedReg:
+    cli
     mov [0x7e10], dl
     xor ax, ax 
     mov ds, ax
     mov es, ax
     mov ss, ax
     mov esp, 0x0500
-
+    cld
+    sti
     ;;things to still add:
     ;detection if the system is already installed
     ;a way to IO with Potential video cards/ other pcie cards
@@ -142,20 +144,7 @@ convert_to_base10:
 
 sort_mem_list:
     jmp $
-        
-    ;; you rotate 1 bit into the first 16 bits, then subtract, if carry flag is set, fail. if not, yippie, then check if it has been 16 times
-    ;;the main idea behind converting binary to base 10 is to divide by 10, video about it will be linked soon:tm:. It should be a ben eater video
-    ;;first display the number in CX (current amount of space in the stack)
-    ;;then sort the memory list that we got from using int 0x15
-    ;;pass that info to possibly the kernel and/or the second stage
-    ;;also some code to parse binary/hex into decimal (possibly using an ascii table)
 
-DiskLoad16b:
-    ;something to boot the 16bit Kernel and shoud make it so that it jumps to mem error if less than 100kb of ram cuz i aint messing with that (yet :troll:)
-
-;;DiskLoadN16b: ;; fix it aint loading shit, main problem, 0x7E00 is empty, my second stage should be there, but isn't?
-  ;;  cld
-    ;;mov si, 0        ; Sector index
 jmp $
 add_to_stack:
     sub word [0x7EFE], 2
@@ -187,6 +176,7 @@ stack_full:
     mov ah, 0x0E
     mov bx, SF
     jmp print_string_SRT
+
 
 text:
     SE db "stack is empty!", 0
