@@ -1,3 +1,4 @@
+bits 16
 [org 0x7C00]
 
 start:
@@ -20,7 +21,7 @@ start:
     hceck_LBA_supprt: ;if supported,return carry0
         mov ax, 0x41
         mov bx, 0x55AA
-        mov dl, [0x7e10]
+        mov dl, [boot_drive]
         int 0x13
         jc no_lba_supprt
 
@@ -44,7 +45,7 @@ start:
     jmp secondstage
 
 no_lba_supprt:;; will also transform LBA > CHS
-            mov dl, [0x7e10]
+            mov dl, [boot_drive]
             cmp dl, 0x80
             jl disk_error ;;we do this because CHS doesnt like floppy detecting like this
             mov ah, 8
@@ -79,7 +80,7 @@ no_lba_supprt:;; will also transform LBA > CHS
             shl al, 6         ; top 2 bits into bits 6–7
             or cl, al            ; merge with sector into CL             ; inject upper 2 bits of cylinder into CL
             mov dh, [Hed]
-            mov dl, [0x7e10]
+            mov dl, [boot_drive]
             cmp cl, 0
             je disk_error
             int 0x13
