@@ -1,191 +1,114 @@
-[org  0x7C00]
-clc
-SegmentedReg:
+[org 0x7C00]
+
+start:
     cli
-    mov [0x7e10], dl
-    xor ax, ax 
+    xor ax, ax
     mov ds, ax
     mov es, ax
     mov ss, ax
-    mov esp, 0x0500
-    cld
+    mov sp, 0x7F00
     sti
-    ;;things to still add:
-    ;detection if the system is already installed
-    ;a way to IO with Potential video cards/ other pcie cards
-    ;possibly internet connection? but first kernel and GUI
 
-stack_setup: ;; planning to use  0x7F00 to 0x7FFF thus 255 spaces and we'll store space left at 0x7EFE
-    ;;we will assume everything pushed onto the stack is 16bits
-    ;;cx is the volume counter
-    ;;ax is used as a pushing variable
-    mov sp, 0x7FFF
-    mov word [0x7EFE], 256
+    ; Save drive number
+    mov [boot_drive], dl
 
-lowermemcheck:
-    clc
-    xor ax, ax
-    int 0x12
-    cmp ax, 639;; ax contains the amount of RAM in kb, starting from 0, "640kb outta be enough for anybody"
-    jb mem_error
-    call convert_to_base10
-
-stacetc:
-    mov cx, 30412          ; CX = 30,412 bytes AKA 29.75 KiB, possibly make this less to make room for second stage
-;;maybe make another 2nd part for 16 bit kernel operations if the user has less than 640kb of RAM
-highmemchk:
-    prechk:
-        xor dx, dx
-        xor ax, ax
-        xor di, di
-        mov es, ax
-        mov di, 0x0500
-        cmp di, 0x0500
-        jne prechk
-    ;;es:di = 0x00000500
-    int15820:
-        clc
-        xor ebx, ebx
-        xor eax, eax
-        mov edx, 0x534D4150
-        mov eax, 0xE820
-        mov ecx, 24
-        int 0x15
-    pastcheck:
-        jc done
-        cmp eax, 0x534D4150
-        jne mem_error_eax
-        cmp ebx, 0 
-        je done
-        clc
-        movzx dx, cl        ; Zero-extend CL into DX (DX = 0000:CL)
-        sub cx, dx          ; Subtract DX from CX
-        jc buffer_full      ; Jump if there's a carry, meaning the buffer is too small
-        clc
-            CLchk:
-                cmp cl, 0x20 ;32 byte
-                je validmem
-                cmp cl, 0x14 ;20 byte
-                je validmem
-                cmp cl, 0x18 ;24 byte
-                je validmem
-                jmp validmem
-
-            validmem:
-                add di, dx
-                mov edx, 0x534D4150
-                mov eax, 0xE820
-                mov ecx, 24
-                int 0x15
-                jmp pastcheck
-
-            buffer_full:
-                xor ebx, ebx
-                mov ah, 0x0E
-                mov bx, MBF
-                jmp print_string_SRT
-            
-            done: ;;it seems that i cant "mov al, [bx]"
-                clc
-                mov ax, cx
-                call convert_to_base10
-                xor dx, dx ;;we can now clear dx because it has no relevant data right now
-                mov dx, 1
-                mov ah, 0x0E
-                mov bx, HMD ;;moves the string into bx
-                jmp print_string_SRT
-
-print_string_SRT:
-    mov al, [bx]
-    cmp al, 0
-    je end
+    ; Print 'L'
     mov ah, 0x0E
+    mov al, 'L'
     int 0x10
-    inc bx
-    jmp print_string_SRT
 
-mem_error_eax: 
+    hceck_LBA_supprt: ;if supported,return carry0
+        mov ax, 0x41
+        mov bx, 0x55AA
+        mov dl, [0x7e10]
+        int 0x13
+        jc no_lba_supprt
+
+    ; Setup DAP (Disk Address Packet)
+    mov byte [dap], 0x10      ; Size
+    mov byte [dap+1], 0x00
+    mov word [dap+2], 1       ; 1 sector
+    mov word [dap+4], 0x0000  ; offset
+    mov word [dap+6], 0x8000  ; segment
+    mov dword [dap+8], 1      ; LBA = 1
+    mov dword [dap+12], 0     ; LBA high
+
+    ; Call INT 13h, AH=42h (Extended Read)
+    mov si, dap
+    mov dl, [boot_drive]
+    mov ah, 0x42
+    int 0x13
+    jc disk_error
+    cmp ah, 0
+    jne disk_error
+    jmp secondstage
+
+no_lba_supprt:;; will also transform LBA > CHS
+            mov dl, [0x7e10]
+            cmp dl, 0x80
+            jl disk_error ;;we do this because CHS doesnt like floppy detecting like this
+            mov ah, 8
+            int 0x13
+            mov [Nhe], dh
+            and cl, 0x3f
+            mov [SpT], cl;;with 0x3f whatever thats supposed to mean
+            Translate_Lba_Chs:
+                mov ax, [dap + 8] ; low word of LBA
+                xor dx, dx              ; clear upper part of dividend
+                mov cx, [SpT]           ; sectors per track
+                div cx                  ; ax = LBA / SPT, dx = LBA % SPT
+                inc dx                  ; sector numbers start from 1
+                mov [Sec], dx           ; store sector
+                mov [Tmp], ax           ; store temp result
+                mov ax, [Tmp]
+                xor dx, dx
+                mov cx, [Nhe]           ; heads per cylinder
+                div cx                  ; ax = cylinders, dx = heads
+                mov [Cyl], ax
+                mov [Hed], dx
+
+        Read_CHS:
+            clc
+            mov bx, 0x8000
+            mov ah, 0x02
+            mov ch, [Cyl]         ; CH = Cylinder low 8 bits
+            mov cl, [Sec]         ; CL = Sector number (1–63)
+            mov ax, [Cyl]
+            mov ch, al        ; low 8 bits
+            mov al, ah
+            shl al, 6         ; top 2 bits into bits 6–7
+            or cl, al            ; merge with sector into CL             ; inject upper 2 bits of cylinder into CL
+            mov dh, [Hed]
+            mov dl, [0x7e10]
+            cmp cl, 0
+            je disk_error
+            int 0x13
+            jc disk_error
+            cmp ah, 0
+            je secondstage
+            cmp ah, 0
+            jne disk_error
+secondstage:
     mov ah, 0x0E
-    mov bx, MEE
-    jmp print_string_SRT
-
-end:
-    cmp dx, 1
-    je sort_mem_list
-    jmp $
-
-convert_to_base10:
-    binary_to_base10:
-    xor cx, cx          ; Clear CX (used to count the number of digits)
-    mov bx, 10          ; Divisor for base 10
-
-    convert_loop:
-    xor dx, dx          ; Clear DX for division
-    div bx              ; Divide AX by 10, quotient in AX, remainder in DX
-    call add_to_stack
-    push dx             ; Push remainder onto stack (this is one digit)
-    inc cx              ; Increment digit counter
-    test ax, ax         ; Check if AX is zero
-    jnz convert_loop    ; If not zero, continue dividing
-
-    print_digits:
-    call remove_from_stack
-    pop dx              ; Get the last digit from the stack
-    add dl, '0'         ; Convert it to ASCII
-    mov ah, 0x0E        ; BIOS teletype function
-    mov al, dl          ; Move digit to AL for printing
-    int 0x10            ; Print the character
-    loop print_digits   ; Repeat until all digits are printed
-    mov ax, [0x7BB0]
-    mov ah, 0x0E  
-    mov al, ' '  
+    mov al, 'S'
     int 0x10
-    iret
-
-sort_mem_list:
-    jmp $
-
-jmp $
-add_to_stack:
-    sub word [0x7EFE], 2
-    jc stack_full
-    ret
-
-remove_from_stack:
-    add word [0x7EFE], 2
-    cmp word [0x7EFE], 256
-    jg stack_empty
-    ret
-   
-mem_error:
-    mov ah, 0x0E
-    mov bx, MEL
-    jmp print_string_SRT
+    jmp 0x8000:0000     ; Jump to loaded sector
 
 disk_error:
     mov ah, 0x0E
-    mov bx, DEE
-    jmp print_string_SRT
+    mov al, 'E'
+    int 0x10
+    jmp $
 
-stack_empty:
-    mov ah, 0x0E
-    mov bx, SE
-    jmp print_string_SRT
+boot_drive: db 0
+Nhe: db 0
+SpT: db 0
+Tmp: db 0
+Sec: db 0
+Hed: db 0
+Cyl: db 0
 
-stack_full:
-    mov ah, 0x0E
-    mov bx, SF
-    jmp print_string_SRT
+dap: times 16 db 0
 
-
-text:
-    SE db "stack is empty!", 0
-    SF db "stack is full!", 0
-    DEE db " invalid disk inserted", 0
-    MEL db " lower memory error", 0
-    MEE db " upper memory check failed EAX", 0
-    MBF db " memory buffer is full", 0
-    HMD db " higher memory reading done ", 0
-
-times 510-($-$$) db 0
-db 0x55, 0xaa
+times 510 - ($ - $$) db 0
+dw 0xAA55
