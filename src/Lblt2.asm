@@ -38,7 +38,7 @@ stack_Subroutine: ;ONLY USES AX FOR PUSHING, ALL OTHER REGS ARE PRESERVED
     add_to_stack: ; we assume everything added to the stack is a 2 byte thingy, stored in AX
         sub word [current_loc], 2
         jc stack_full ; we check if theres space for 2 bytes in the current location, if carry bit set its already fucked.
-        cmp word [current_loc], 0x0500
+        cmp word [current_loc], 0x0600 ; because thats where our stack stops
         jle stack_full ; if its bellow 0x0500 we say its full. no shame, nothing done.
         push ax
         ret
@@ -80,7 +80,7 @@ mem_detection:
         prep:
             mov ax, 0         ; ES = 0
             mov es, ax
-            mov di, 0x8400    ; ES:DI points to 0x0000:0x8400
+            mov di, 0x8500    ; ES:DI points to 0x0000:0x8500
             xor ebx, ebx      ; EBX must be zero for the first call
             xor eax, eax
             xor ecx, ecx
@@ -120,23 +120,33 @@ mem_detection:
                 mov ah, 0x0E
                 mov al, 'm'
                 int 0x10 ; display "m" to say that high mem part is done
-                mov si, 0x8400
+                mov si, 0x8500
                 mov eax, [es:si + 0]   ; base addr low. We wont need edx for this
                 mov edx, [es:si + 4]   ; base addr high
                 mov ebx, [es:si + 8]   ; length low
                 mov ecx, [es:si + 12]  ; length high
                 cmp edx, 0
                 jg continue ; somewhere to where we "upload" the map
-                mov edx, [es:si + 16] 
-                cmp edx, 1
-                jg skip
-                jmp $
+                mov edx, [es:si + 16] ;move the id into edx
+                cmp edx, 1 ;checks if its usable
+                jg skip ;1> non usable
+                add si, 32
+                cmp si, di
+                jmp kernellocation_setup
 
                 skip: 
-                    add si, 32
-                    cmp si, di
+                    add si, 32; we add 32 to si to get to the next location
+                    cmp si, di ;check if we're done
                     jge continue
                     jmp done_reading
+
+                kernellocation_setup:
+                    mov [kernel_loc], eax ; move the location to 0x0500, we will read it from here, make a new location. and then fix this, since assembly cant really understand variables outside of registeres
+                    mov [kernel_loc +5], ebx
+                    mov [kernel_loc +9], ecx ;length is starting at 0x0505, we leave one byte emtpy between the location and the length
+
+                    
+                
                     
 
                         
@@ -247,7 +257,10 @@ stack_max: dw 0x7BF6 ;7BF6 till 0x0500, yes really that much stack space. i'll b
 CX_storage: dw 0x7BF7 ;stores CX for the calculation
 Push_thing: dw 0x7BF8 ;stores the thing we want to push for the time being, so that we can calculate if we have enough space
 current_loc: dw 0x7BFF ;stores the amount we still have. in a 64 bit thing. just to be sure.
-length_mem_map: dd 0x8300
+kernel_loc: dw 0x0500
+length_mem_map: dd 0x8400
+VESA_MAP: dw 0x8300
+
 dap: times 16 db 0
 
 ;file storage
