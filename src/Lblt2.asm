@@ -1,6 +1,38 @@
-bits 16
 [org 0x8000]
+section .data
+    boot_drive: db 0
+    Nhe: db 0
+    SpT: db 0
+    Tmp: db 0
+    Sec: db 0
+    Hed: db 0
+    Cyl: db 0
+    stack_max: dw 0x7BF6 ;7BF6 till 0x0500, yes really that much stack space. i'll be thankfull later
+    CX_storage: dw 0x7BF7 ;stores CX for the calculation
+    Push_thing: dw 0x7BF8 ;stores the thing we want to push for the time being, so that we can calculate if we have enough space
+    current_loc: dw 0x7BFF ;stores the amount we still have. in a 64 bit thing. just to be sure.
+    length_mem_map: dd 0x8800
+    kernel_loc: dw 0x0500
+    black: db 0
+    blue: db 0
+    green: db 0
+    cyan: db 0
+    red: db 0
+    magenta: db 0
+    brown: db 0
+    light_gray: db 0
+    dark_gray: db 0
+    Light_blue: db 0
+    Light_green: db 0
+    Light_cyan: db 0
+    Light_red: db 0
+    Light_magenta: db 0
+    yellow: db 0
+    white: db 0
+    dap: times 16 db 0
 
+bits 16
+section .text
 start:
     cli
     mov ax, 0x8000
@@ -9,11 +41,7 @@ start:
     xor ax, ax
     mov ss, ax
     mov si, ax
-    sti
-    ; Print '2'
-    mov ah, 0x0E
-    mov al, '2'
-    int 0x10   
+    sti 
         ; Setup DAP (Disk Address Packet)
     mov byte [dap], 0x10      ; Size
     mov byte [dap+1], 0x00
@@ -23,6 +51,29 @@ start:
     mov dword [dap+8], 1      ; LBA = 1
     mov dword [dap+12], 0     ; LBA high
 
+setup_Data:
+    mov byte [blue], 0x01
+    mov byte [green], 0x02
+    mov byte [cyan], 0x03
+    mov byte [red], 0x04
+    mov byte [magenta], 0x05
+    mov byte [brown], 0x06
+    mov byte [light_gray], 0x07
+    mov byte [dark_gray], 0x08
+    mov byte [Light_blue], 0x09
+    mov byte [Light_green], 0xa
+    mov byte [Light_cyan], 0x0b
+    mov byte [Light_red], 0x0c
+    mov byte [Light_magenta], 0x0d
+    mov byte [yellow], 0x0e
+    mov byte [white], 0x0f
+    mov word [stack_max], 0x7BF6 ;7BF6 till 0x0500, yes really that much stack space. i'll be thankfull later
+    mov word [CX_storage], 0x7BF7 ;stores CX for the calculation
+    mov word [Push_thing], 0x7BF8 ;stores the thing we want to push for the time being, so that we can calculate if we have enough space
+    mov word [current_loc], 0x7BFF ;stores the amount we still have. in a 64 bit thing. just to be sure.
+    mov dword [length_mem_map], 0x8800
+    mov word [kernel_loc], 0x0500
+
 stack_Subroutine: ;ONLY USES AX FOR PUSHING, ALL OTHER REGS ARE PRESERVED
     stack_setup:
         mov [CX_storage], cx
@@ -30,9 +81,6 @@ stack_Subroutine: ;ONLY USES AX FOR PUSHING, ALL OTHER REGS ARE PRESERVED
         mov [current_loc], cx
         mov sp, [current_loc]
         mov cx, [CX_storage]
-        mov ah, 0x0E
-        mov al, 's'
-        int 0x10
         jmp mem_detection
 
     add_to_stack: ; we assume everything added to the stack is a 2 byte thingy, stored in AX
@@ -72,15 +120,12 @@ mem_detection:
         jc error ;jumps if it failed (it shouldn't on any normal system)
         cmp ax, 639 ; 639, because the count starts at 0.
         jl Low_memory
-        mov ah, 0x0E
-        mov al, 'l'
-        int 0x10
 
     high_mem_detection:
         prep:
             mov ax, 0         ; ES = 0
             mov es, ax
-            mov di, 0x8500    ; ES:DI points to 0x0000:0x8500
+            mov di, 0x8900    ; ES:DI points to 0x0000:0x8900
             xor ebx, ebx      ; EBX must be zero for the first call
             xor eax, eax
             xor ecx, ecx
@@ -115,12 +160,8 @@ mem_detection:
             test ebx, ebx
             jnz .loop
 
-
             done_reading:
-                mov ah, 0x0E
-                mov al, 'm'
-                int 0x10 ; display "m" to say that high mem part is done
-                mov si, 0x8500
+                mov si, 0x8900
                 mov eax, [es:si + 0]   ; base addr low. We wont need edx for this
                 mov edx, [es:si + 4]   ; base addr high
                 mov ebx, [es:si + 8]   ; length low
@@ -144,12 +185,8 @@ mem_detection:
                     mov [kernel_loc], eax ; move the location to 0x0500, we will read it from here, make a new location. and then fix this, since assembly cant really understand variables outside of registeres
                     mov [kernel_loc +5], ebx
                     mov [kernel_loc +9], ecx ;length is starting at 0x0505, we leave one byte emtpy between the location and the length
-
-                    
-                
-                    
-
-                        
+                    jmp continue
+                                          
     error:
         mov ah, 0x0E
         mov al, 'E'
@@ -163,14 +200,66 @@ mem_detection:
         jmp $
 
 continue:
-    ; Print 'H'
+    call Clear_screen
     mov ah, 0x0E
-    mov al, 'H'
-    int 0x10  
+    mov al, 'V'
+    int 0x10
+    xor ebx, ebx
+    mov bx, mel
+    sub bx, 0x8000
+    mov ah, [yellow]
+    call print_to_screen
+    jmp $
+
+print_to_screen: ;we assume bx is filled with a string to print, if bx is empty we print the single char in AL, and that the color is stored in AH
+        xor di, di            ; start at 0
+        cmp bx, 0
+        je print_char
+    print_loop:
+        push ax
+        mov ax, 0xB800
+        pop ax
+        mov al, [bx]
+        cmp al, 0
+        je done
+        stosw
+        inc bx
+        jmp print_loop
+
+
+
+    print_char:
+        push ax
+        mov ax, 0xB800
+        mov es, ax
+        xor ax, ax
+        pop ax
+        stosw             ; fill screen
+        ret
+
+    done:
+        ret
+        hlt 
+        jmp $
+
 
 hlt
 jmp $
 
+Clear_screen:
+    xor di, di  
+    mov al, ' '
+    mov ah, [black]
+    push ax
+    mov ax, 0xB800
+    mov es, ax
+    xor ax, ax
+    pop ax
+    mov cx, 2800
+    rep stosw             ; fill screen
+    xor di, di  
+    mov ah, [white]
+    ret
 ;;diskIO should always be last, and halted right before. because we do *not* want to accidentally load this crap.
 DiskIO_Subroutine:
     hceck_LBA_supprt: ;if supported,return carry0
@@ -245,27 +334,7 @@ DiskIO_Subroutine:
         mov al, 'D'
         int 0x10
         jmp $
-
-boot_drive: db 0
-Nhe: db 0
-SpT: db 0
-Tmp: db 0
-Sec: db 0
-Hed: db 0
-Cyl: db 0
-stack_max: dw 0x7BF6 ;7BF6 till 0x0500, yes really that much stack space. i'll be thankfull later
-CX_storage: dw 0x7BF7 ;stores CX for the calculation
-Push_thing: dw 0x7BF8 ;stores the thing we want to push for the time being, so that we can calculate if we have enough space
-current_loc: dw 0x7BFF ;stores the amount we still have. in a 64 bit thing. just to be sure.
-kernel_loc: dw 0x0500
-length_mem_map: dd 0x8400
-VESA_MAP: dw 0x8300
-
-dap: times 16 db 0
-
 ;file storage
 
-
-
-
-times 1024 - ($ - $$) db 0
+mel db 'Testing memory... hold on tight',0 ;can be any variable string
+times 2048 - ($ - $$) db 0
