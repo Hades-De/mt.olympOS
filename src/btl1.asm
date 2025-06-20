@@ -3,20 +3,11 @@ bits 16
 
 start:
     cli
-    xor ax, ax
-    mov ds, ax
-    mov es, ax
-    mov ss, ax
     mov sp, 0x7F00
     sti
 
     ; Save drive number
     mov [boot_drive], dl
-
-    ; Print 'L'
-    mov ah, 0x0E
-    mov al, 'L'
-    int 0x10
 
     hceck_LBA_supprt: ;if supported,return carry0
         mov ax, 0x41
@@ -28,7 +19,7 @@ start:
     ; Setup DAP (Disk Address Packet)
     mov byte [dap], 0x10      ; Size
     mov byte [dap+1], 0x00
-    mov word [dap+2], 1       ; 1 sector
+    mov word [dap+2], 4      ; 2 sectors
     mov word [dap+4], 0x0000  ; offset
     mov word [dap+6], 0x8000  ; segment
     mov dword [dap+8], 1      ; LBA = 1
@@ -53,6 +44,7 @@ no_lba_supprt:;; will also transform LBA > CHS
             mov [Nhe], dh
             and cl, 0x3f
             mov [SpT], cl;;with 0x3f whatever thats supposed to mean
+
             Translate_Lba_Chs:
                 mov ax, [dap + 8] ; low word of LBA
                 xor dx, dx              ; clear upper part of dividend
@@ -89,17 +81,115 @@ no_lba_supprt:;; will also transform LBA > CHS
             je secondstage
             cmp ah, 0
             jne disk_error
-secondstage:
-    mov ah, 0x0E
-    mov al, 'S'
-    int 0x10
-    jmp 0x8000:0000     ; Jump to loaded sector
 
-disk_error:
-    mov ah, 0x0E
-    mov al, 'E'
-    int 0x10
-    jmp $
+secondstage:   
+    mem_detection:
+        Low_Mem_Detection:
+            clc
+            int 0x12 ;asks for the low memory, size in ax
+            jc error ;jumps if it failed (it shouldn't on any normal system)
+            cmp ax, 639 ; 639, because the count starts at 0.
+            jl Low_memory
+
+        high_mem_detection:
+            prep:
+                mov ax, 0         ; ES = 0
+                mov es, ax
+                mov di, 0x8900    ; ES:DI points to 0x0000:0x8900
+                xor ebx, ebx      ; EBX must be zero for the first call
+                xor eax, eax
+                xor ecx, ecx
+                mov eax, 0xE820   ; E820 memory map call
+                mov edx, 0x534D4150 ; 'SMAP'
+                mov ecx, 24       ; We request 24 bytes (what BIOS supports)
+                int 0x15
+                jc error
+                cmp eax, 0x534D4150
+                jne error
+
+            .loop:
+                ; Padding remaining 8 bytes to make 32-byte entries
+                ; First pad the last 8 bytes to 0 (manual padding)
+                mov si, di
+                add si, 24
+                mov dword [es:si], 0
+                mov dword [es:si+4], 0
+
+                add di, 32
+                add word [0x8800], 32
+
+                ; Prepare next call
+                mov eax, 0xE820
+                mov edx, 0x534D4150
+                mov ecx, 24
+                int 0x15
+
+                jc continue
+                cmp eax, 0x534D4150
+                jne error
+                test ebx, ebx
+                jnz .loop
+                jmp continue
+                                            
+        error:
+            mov ah, 0x0E
+            mov al, 'E'
+            int 0x10
+            jmp $
+
+        Low_memory:
+            mov ah, 0x0E
+            mov al, 'L'
+            int 0x10
+            jmp $
+    continue:
+        CODE_SEG equ code_descriptor - GDT_Start
+        DATA_SEG equ data_descriptor - GDT_Start
+
+        cli
+        lgdt [GDT_Descriptor]
+        mov eax, cr0
+        or eax, 1
+        mov cr0, eax
+        jmp CODE_SEG:start_protected_mode
+        jmp $
+
+        GDT_Start:
+            null_descriptor:
+                dd 0
+                dd 0
+            code_descriptor:
+                dw 0xFFFF
+                dw 0
+                db 0
+                db 0b10011010
+                db 0b11001111
+                db 0
+            data_descriptor:
+                dw 0xFFFF
+                dw 0
+                db 0
+                db 0b10010010
+                db 0b110011
+                db 0
+            GDT_End:
+
+        GDT_Descriptor:
+            dw GDT_End - GDT_Start -1 ; size
+            dd GDT_Start
+
+        disk_error:
+            mov ah, 0x0E
+            mov al, 'E'
+            int 0x10
+            jmp $
+
+        [bits 32]
+        start_protected_mode:
+            mov al, 'A'
+            mov ah, 0x0f
+            mov [0xb8000], ax
+            jmp dword 0x08:0x80000    ; Jump to loaded sector
 
 boot_drive: db 0
 Nhe: db 0
