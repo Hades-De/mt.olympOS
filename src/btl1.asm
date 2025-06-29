@@ -1,31 +1,44 @@
-bits 16
+[bits 16]
 [org 0x7C00]
 
 start:
     cli
     mov sp, 0x7F00
     sti
-
+    in al, 0x92
+    or al, 00000010b
+    and al, 11111110b
+    out 0x92, al
     ; Save drive number
     mov [boot_drive], dl
 
     hceck_LBA_supprt: ;if supported,return carry0
         mov ax, 0x41
-        mov bx, 0x55AA
-        mov dl, [boot_drive]
+        mov bx, 0x55AA ;add back dl if broken
         int 0x13
         jc no_lba_supprt
 
     ; Setup DAP (Disk Address Packet)
     mov byte [dap], 0x10      ; Size
     mov byte [dap+1], 0x00
-    mov word [dap+2], 4      ; 2 sectors
+    mov word [dap+2], 2      ; 2 sectors
     mov word [dap+4], 0x0000  ; offset
-    mov word [dap+6], 0x8000  ; segment
+    mov word [dap+6], 0x0800  ; segment
     mov dword [dap+8], 1      ; LBA = 1
     mov dword [dap+12], 0     ; LBA high
 
     ; Call INT 13h, AH=42h (Extended Read)
+    mov si, dap
+    mov dl, [boot_drive]
+    mov ah, 0x42
+    int 0x13
+    jc disk_error
+    cmp ah, 0
+    jne disk_error
+    mov word [dap+2], 10      ; 2 sectors
+    mov word [dap+4], 0x0000  ; offset
+    mov word [dap+6], 0x0900  ; segment
+    mov dword [dap+8], 3     ; LBA = 1
     mov si, dap
     mov dl, [boot_drive]
     mov ah, 0x42
@@ -61,7 +74,6 @@ no_lba_supprt:;; will also transform LBA > CHS
                 mov [Hed], dx
 
         Read_CHS:
-            clc
             mov bx, 0x8000
             mov ah, 0x02
             mov ch, [Cyl]         ; CH = Cylinder low 8 bits
@@ -85,7 +97,6 @@ no_lba_supprt:;; will also transform LBA > CHS
 secondstage:   
     mem_detection:
         Low_Mem_Detection:
-            clc
             int 0x12 ;asks for the low memory, size in ax
             jc error ;jumps if it failed (it shouldn't on any normal system)
             cmp ax, 639 ; 639, because the count starts at 0.
@@ -143,16 +154,12 @@ secondstage:
             int 0x10
             jmp $
     continue:
-        CODE_SEG equ code_descriptor - GDT_Start
-        DATA_SEG equ data_descriptor - GDT_Start
-
         cli
         lgdt [GDT_Descriptor]
         mov eax, cr0
         or eax, 1
         mov cr0, eax
-        jmp CODE_SEG:start_protected_mode
-        jmp $
+        jmp  dword 0x08:0x08000    ; Jump to loaded sector
 
         GDT_Start:
             null_descriptor:
@@ -170,7 +177,7 @@ secondstage:
                 dw 0
                 db 0
                 db 0b10010010
-                db 0b110011
+                db 0b11001111
                 db 0
             GDT_End:
 
@@ -183,13 +190,6 @@ secondstage:
             mov al, 'E'
             int 0x10
             jmp $
-
-        [bits 32]
-        start_protected_mode:
-            mov al, 'A'
-            mov ah, 0x0f
-            mov [0xb8000], ax
-            jmp dword 0x08:0x80000    ; Jump to loaded sector
 
 boot_drive: db 0
 Nhe: db 0
