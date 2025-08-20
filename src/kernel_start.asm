@@ -1,25 +1,6 @@
-[org 0x09000]
+[org 0x100000]
 [bits 32]
-
-;======GTD SETUP======
-    GDT_setup:
-        cli
-        lgdt [gdt_descriptor]
-        mov eax, cr0
-        or eax, 1
-        mov cr0, eax
-        jmp dword 0x08:seg_regs_setup   ; Jump to loaded sector
-
-        gdt_start:
-        dq 0x0000000000000000        ; null descriptor
-        dq 0x00cf9a000000ffff        ; code segment: base=0, limit=4GB, flags=0x9A, gran=1
-        dq 0x00cf92000000ffff        ; data segment: base=0, limit=4GB, flags=0x92, gran=1
-    gdt_end:
-
-    gdt_descriptor:
-        dw gdt_end - gdt_start - 1
-        dd gdt_start
-
+cli
 ;======SEGMENTED REGISTERS SETUP======
     seg_regs_setup:
         mov ax, 0x10
@@ -32,6 +13,21 @@
         xor di, di
         xor ax, ax
         mov esi, 0xB8000
+        mov dword [LBA_address], 0x6f
+        mov dword [dest], 0x100000
+        mov byte [write_enable], 0
+        mov dl, start_vga
+        call print
+        mov dl, clr_scr
+        call print
+        mov ebx, Gdt_init
+        mov ah, 0x0f
+        mov dl, print_char | loop_func
+        call print
+        call init_ok
+        mov dl, N_line
+        call print
+        jmp idt_int_setup
 
 ;======INTERRUPT TABLE ENTRIES + PIC SETUP======
     idt_int_setup:
@@ -130,7 +126,7 @@
             call make_idt_entry
 
             ; Mask everything except IRQ0 (timer), for now
-            mov al, 0b11111000
+            mov al, 0b11111011
             out 0x21, al
             mov al, 0b10111111 
             out 0xA1, al
@@ -138,33 +134,53 @@
 ;======KERNEL======
     lidt [idt_ptr]
     sti
+    int 0x01
 
     hechloopd:
         cmp byte [enter_en], 1
         je parsing_setup
-        mov dword [buffer_disk], 0x100000
-        mov dword [sector], 100
-        call load_LBA
-        .loop:
-            call ready_check
-            cmp byte [disk_able], 0
-            je .loop
-            cmp byte [sector], 0
-            je jump_to_kernel
-            jmp .loop
+        jmp hechloopd
 
-    jump_to_kernel:
-        mov al, 0b11111101
-        out 0x21, al
-        mov al, 0xFF
-        out 0xA1, al
-        mov al, 0x20
-        jmp dword 0x08:0x100000
+screen_functions:
+    init_ok:
+        mov ah, 0x0f ; white
+        mov dl, print_char
+        call print
+        mov al, '['
+        mov dl, print_char
+        call print
+        xor ax, ax
+        mov ah, 0x02 ; green
+        mov ebx, ok
+        mov dl, print_char | loop_func
+        call print
+        mov ah, 0x0f ; white
+        mov al, ']'
+        mov dl, print_char
+        call print
+        ret
+
+    init_failed:
+        mov ah, 0x0f ; white
+        mov dl, print_char
+        call print
+        mov al, '['
+        mov dl, print_char
+        call print
+        xor ax, ax
+        mov ah, 0x04 ; red
+        mov ebx, failed
+        mov dl, print_char | loop_func
+        call print
+        mov ah, 0x0f ; white
+        mov al, ']'
+        mov dl, print_char
+        call print
+        ret
 
     parsing_setup:
-        mov esi, [buffer_ptr]
-        mov ebx, [vid_counter]
-        call next_line
+        mov dl, N_line
+        call print
         parsing:
             xor ecx, ecx
             mov edi, 0x530 ;start of the keyboard buffer
@@ -216,37 +232,65 @@
             jmp command_not_found ;if it somehow doesnt work, we just say we couldn't find the command
 
         ;======handlers======
-        .handler4:
-            mov eax, [handler_table4 + ecx*4]
-            jmp eax
-        .handler3:
-            mov eax, [handler_table3 + ecx*4]
-            jmp eax
-        .handler2:
-            mov eax, [handler_table2 + ecx*4]
-            jmp eax
-        return:
-            xor ebx, ebx
-            mov [buffer_ptr], esi
-            mov [vid_counter], ebx
-            ret
+            .handler4:
+                mov eax, [handler_table4 + ecx*4]
+                jmp eax
+            .handler3:
+                mov eax, [handler_table3 + ecx*4]
+                jmp eax
+            .handler2:
+                mov eax, [handler_table2 + ecx*4]
+                jmp eax
 
         functions:
-            next_line: ;expects ebx = [vid_counter], and esi = [buffer_ptr]
-                cmp ebx, 80
-                jge return
-                xor ax, ax
-                inc ebx
-                mov word [esi], ax
-                add esi, 2
-                cmp esi, vidmemend
-                jae .reset_cursor
-                jmp next_line ;we do the checking at the start, thus if ebx=80 it just jumps to return first thing
+            writeFS_Disk:
+                xor ecx, ecx
+                xor eax, eax
+                xor bl, bl
+                lea eax, [lookup_table]
+                mov dword [dest], 0x100000
+                call read_status
+                call status_ch_busy
+                cmp bl, 1
+                je writeFS_Disk
+                call status_ch_ready
+                xor ecx, ecx
+                call set_drive
+                mov byte [write_enable], 1
+                mov dword [LBA_address], 0x0b
+                mov dword [sector], 1
+                call set_lba
+                call status_ch_busy
+                cmp bl, 1
+                je writeFS_Disk
+                call set_RW
+                hlt
+                ret
 
-            .reset_cursor:
-                mov esi, 0xB8000
-                mov [buffer_ptr], esi
-                jmp next_line
+            readFS_Disk:
+                xor ecx, ecx
+                xor eax, eax
+                xor bl, bl
+                lea eax, [lookup_table]
+                mov dword [dest], 0x100000
+                call read_status
+                call status_ch_busy
+                cmp bl, 1
+                je readFS_Disk
+                call status_ch_ready
+                xor ecx, ecx
+                call set_drive
+                mov byte [write_enable], 0
+                mov dword [LBA_address], 0x0b ;0x6F
+                mov dword [sector], 1
+                call set_lba
+                call status_ch_busy
+                cmp bl, 1
+                je readFS_Disk
+                call set_RW
+                hlt
+                ret
+
 
             clear_buffer:
                 mov byte [edi], 0x00
@@ -260,6 +304,7 @@
                 add edi, 5
                 mov ebx, edi
                 mov ah, 0x0f
+                mov dl, print_char | loop_func
                 call print
                 jmp command_done
 
@@ -269,47 +314,59 @@
             help:
                 mov ebx, commands_len_2
                 mov ah, 0x0f
+                mov dl, print_char | loop_func
                 call print
                 mov ax, ' '
-                call Print_Character
+                mov dl, print_char
+                call print
                 mov ebx, commands_len_3
                 mov ah, 0x0f
+                mov dl, print_char | loop_func
                 call print
                 mov ax, ' '
-                call Print_Character
+                mov dl, print_char
+                call print
                 mov ebx, commands_len_4
                 mov ah, 0x0f
+                mov dl, print_char | loop_func
                 call print
                 jmp command_done
 
-            clear:
-                xor ax, ax
-                xor dx, dx
-                mov esi, 0xB8000
-                    .clear:
-                        mov word [esi], ax
-                        add esi, 2
-                        inc dx
-                        cmp dx, 1967
-                        jl .clear
-                        mov esi, 0xB8000
-                        mov [buffer_ptr], esi
-                        jmp command_done
+            clear:  
+                mov dl, clr_scr
+                call print
+                jmp command_done
 
-                    
+            load:
+                jmp command_done
+                add edi, 5
+                ;call Name_to_Loc ;when it returns, we have eax for the lba adress, and ecx, as the length in 512 sectors (1=512 bytes)
+                mov [sector], ecx
+                mov [LBA_address], eax
+                ;call find_free_adress ;we'd want to write it to a free (non used) adress in memory
+
+                ;call load_LBA
+
         ;======1-2 letter commands======
             ls:
+                call readFS_Disk
+                xor ebx, ebx
+                xor eax, eax
+                mov ebx, lookup_table
+                mov ah, 0x0f
+                mov dl, print_char | loop_func
+                call print
                 jmp command_done
 
 
         command_not_found:
             mov ebx, noCom
             mov ah, 0x0f
+            mov dl, print_char | loop_func
             call print
         command_done:
-            mov ebx, [vid_counter]
-            mov esi, [buffer_ptr]
-            call next_line
+            mov dl, N_line
+            call print
             mov edi, 0x7000
             call clear_buffer
             mov edi, 0x530
@@ -323,6 +380,7 @@
             pusha
             mov ah, 0x04
             mov ebx, zero
+            mov dl, print_char | loop_func
             call print
             popa
             cli
@@ -331,18 +389,21 @@
 
         Debug:
             pusha
-            mov ah, 0x04
-            mov ebx, debug
+            mov ebx, Idt_init
+            mov ah, 0x0f
+            mov dl, print_char | loop_func
+            call print
+            call init_ok
+            mov dl, N_line
             call print
             popa
-            cli
-            hlt
-            jmp $
+            iret
 
         Non_mask_int:
             pusha
             mov ah, 0x04
             mov ebx, nmi
+            mov dl, print_char | loop_func
             call print
             popa
             cli
@@ -353,6 +414,7 @@
             pusha
             mov ah, 0x04
             mov ebx, breakp
+            mov dl, print_char | loop_func
             call print
             popa
             cli
@@ -362,8 +424,9 @@
         Overflow:
             pusha
             mov ah, 0x04
-            mov ebx, zero
-            call overf
+            mov ebx, overf
+            mov dl, print_char | loop_func
+            call print
             popa
             cli
             hlt
@@ -373,6 +436,7 @@
             pusha
             mov ah, 0x04
             mov ebx, bre
+            mov dl, print_char | loop_func
             call print
             popa
             cli
@@ -383,6 +447,7 @@
             pusha
             mov ah, 0x04
             mov ebx, inop
+            mov dl, print_char | loop_func
             call print
             popa
             cli
@@ -393,6 +458,7 @@
             pusha
             mov ah, 0x04
             mov ebx, dna
+            mov dl, print_char | loop_func
             call print
             popa
             cli
@@ -403,6 +469,7 @@
             pusha
             mov ah, 0x04
             mov ebx, df
+            mov dl, print_char | loop_func
             call print
             popa
             cli
@@ -413,6 +480,7 @@
             pusha
             mov ah, 0x04
             mov ebx, cso
+            mov dl, print_char | loop_func
             call print
             popa
             cli
@@ -423,6 +491,7 @@
             pusha
             mov ah, 0x04
             mov ebx, intts
+            mov dl, print_char | loop_func
             call print
             popa
             cli
@@ -433,6 +502,7 @@
             pusha
             mov ah, 0x04
             mov ebx, snp
+            mov dl, print_char | loop_func
             call print
             popa
             cli
@@ -443,6 +513,7 @@
             pusha
             mov ah, 0x04
             mov ebx, ssf
+            mov dl, print_char | loop_func
             call print
             popa
             cli
@@ -453,6 +524,7 @@
             pusha
             mov ah, 0x04
             mov ebx, gpf
+            mov dl, print_char | loop_func
             call print
             popa
             cli
@@ -463,6 +535,7 @@
             pusha
             mov ah, 0x04
             mov ebx, pf
+            mov dl, print_char | loop_func
             call print
             popa
             cli
@@ -472,27 +545,8 @@
 ;======KEYBOARD, TIMER, DISK HANDLERS======
         timer:
             pusha
-            mov al, [disk_able]
-            cmp al, 1
-            jne keyboard_timer
-            mov byte [cursor_timer], 150
-        
-            disk_timer:
-                mov al, [cursor_timer]
-                dec al
-                mov [cursor_timer], al
-                cmp al, 0
-                jne .done
-                mov byte [cursor_timer], 10 ; perhaps instead of doing the blinking again, write something to the screen telling the user the number of secs have passed
-                mov byte [disk_able], 0
-                .done:
-                    mov al, 0x20
-                    out 0x20, al
-                    popa
-                    iret
-
-            keyboard_timer:
-                mov esi, [buffer_ptr]        ; video memory ptr (cursor location)     
+            ;keyboard_timer:
+                ;mov esi, [buffer_ptr]        ; video memory ptr (cursor location)     
                 mov al, [cursor_timer]
                 dec al
                 mov [cursor_timer], al
@@ -539,7 +593,7 @@
             add edx, ebx
             mov al, [edx]
             mov edi, [CMD_string]
-            mov esi, [buffer_ptr]
+            ;mov esi, [buffer_ptr]
             mov ecx, [vid_counter]
 
 
@@ -564,7 +618,7 @@
                     mov word [esi], ' '
                     sub esi, 2
                     mov word [esi], ' '
-                    mov [buffer_ptr], esi
+                    ;mov [buffer_ptr], esi
                     mov [CMD_string], edi
                     mov [vid_counter], ecx
                     jmp key_release
@@ -584,7 +638,7 @@
                 mov ah, 0x0F
                 mov word [esi], ax
                 add esi, 2
-                mov [buffer_ptr], esi
+                ;mov [buffer_ptr], esi
                 cmp esi, 0xB8F9E        ; Screen end? Reset cursor
                 jae reset_cursor
 
@@ -596,127 +650,190 @@
 
             reset_cursor:
                 mov esi, 0xB8000
-                mov [buffer_ptr], esi
+                ;mov [buffer_ptr], esi
                 jmp key_release        ; EOI and return
 
         Disk_ATA_Handler:
             pusha
-            mov edi, [buffer_disk]
-            read_from_disk:
-                loop_diskread:
-                    mov dx, ATA_IO_Base
-                    mov ecx, 256
-                    rep insw
-                    mov [buffer_disk], edi    
-                    xor eax, eax
-                mov eax, [sector]
-                dec eax
-                mov [sector], eax
-                mov eax, [disk_able]
-                inc eax
-                mov [disk_able], eax
+            mov cx, 256
+            mov dx, ATA_IO_Base
+            cmp byte [write_enable], 1
+            je .write
+            jmp .read
+            .read:
+                cld
+                mov di, [dest]
+                rep insw
+                mov [dest], di
+                jmp .done
+
+            .write:
+                mov si, [dest]
+                .loop:
+                    outsw
+                    add si, 2
+                    jmp $ + 2
+                    loop .loop
+                mov [dest], si
+                mov dx, ATA_IO_Base + 7
+                mov al, 0xe7
+                out dx, al
+                jmp .done
+
+            .done:
                 mov al, 0x20
                 out 0x20, al            ; EOI PIC
                 out 0xA0, al         ; send EOI to slave PIC
                 popa
                 iret
 
-Print_Character: ;expects esi to be set, color in ah, letter byte in al, and edi to have [vid_counter]. increases [vid_counter], [buffer_ptr],
-    cmp al, 0x20
-    jne .print
-    mov ah, 0x00
-    mov al, 0x00
-    .print:
-        mov word [esi], ax
-        add esi, 2
-        cmp esi, vidmemend
-        jae .reset_cursor
-        .update_print_ptr:
-            inc edi
-            cmp edi, 80
-            je .reset_vid_counter
-        .return:
-            mov [buffer_ptr], esi
-            mov [vid_counter], edi
+write_file_info:
+    mov dword [read_loc], eax
+    mov dword [read_loc +4], ecx
+    mov byte [read_loc +8], bl
+    ret
+
+; \\setup_drive//
+    set_drive: ;cl =0 master, 1=slave
+        mov eax, [LBA_address]
+        shr eax, 28 ;shr by lba-N (n=4)
+        and eax, 0x0f ; mask only the lowest 4 bits
+        cmp cl, 0
+        je set_master
+        or al, 0xf0 ; or it with 0xf0 for 'slave'
+        jmp send_port_1f6
+
+        set_master:
+            or al, 0xe0 ; or it with 0xe0 for master bit
+
+        send_port_1f6:
+            mov dx, ATA_IO_Base + 6 ; 0x1f6
+            out dx, al
             ret
 
-        .reset_cursor:
-                mov esi, 0xB8000
-                mov [buffer_ptr], esi
-                jmp .update_print_ptr
+    set_lba: ; also sets sector count!
+        set_sector:
+            mov al, [sector]
+            mov dx, ATA_IO_Base + 2 ;base is 0x1f0, plus two makes 0x1f2
+            out dx, al
+        
+        set_lowbyte:
+            mov eax, [LBA_address]
+            mov dx, ATA_IO_Base + 3
+            out dx, al
 
-        .reset_vid_counter:
-            mov edi, 0
-            jmp .return
+        set_midbyte:
+            mov al, ah
+            mov dx, ATA_IO_Base + 4
+            out dx, al
 
-print: ;EXPECTS EBX TO HAVE STRING, AND COLOR BYTE TO BE SET!!! in ah
-    mov [color_attr_buffer], ah
-    mov esi, [buffer_ptr]
-    mov edi, [vid_counter]
-    .print_loop:
-        mov ah, [color_attr_buffer] ; just so, if we had a space in the single char print, it sets it back to what it was
-        mov al, [ebx]
-        test al, al
-        je .return
-        call Print_Character
-        inc ebx
-        jmp .print_loop
-
-    .return:
-            mov [buffer_ptr], esi
-            mov [vid_counter], edi
+        set_highbyte:
+            shr eax, 16
+            mov dx, ATA_IO_Base + 5
+            out dx, al
             ret
 
-load_LBA:
-    in   al, 0x21        ; PIC master mask
-    and  al, 0b11111011  ; clear bit 1 to enable IRQ 1 (PS/2), but that’s not us
-    out 0x21, al
-    in   al, 0xA1        ; PIC slave mask
-    and  al, 0b10111111  ; clear bit 6 to enable IRQ14
-    out  0xA1, al
-    .set_read_sectors: 
-        mov dx, ATA_IO_Base + 2
-        mov al, [sector]
-        out dx, al
-    .setmaster:
-        mov eax, [LBA_address]
-        shr eax, 24
-        and al, 0x0F
-        or al, 0xE0
-        mov dx, ATA_IO_Base + 6
-        out dx, al
-        mov dx, ATA_IO_Base + 7
-        in al, dx
-        in al, dx
-        in al, dx
-        in al, dx
-    .set_lowMidHigh_bytes:
-        mov eax, [LBA_address]
-        mov dx, ATA_IO_Base + 3 
-        out dx, al                ; al = bits 0-7
-        inc dx
-        shr eax, 8                ; bits 8–15 now in al
-        out dx, al
-        inc dx 
-        shr eax, 8                ; bits 16–23 now in al
-        out dx, al 
-    .read:
-        mov dx, ATA_IO_Base +7
+    set_RW: ; expects write_enable = 1 when it wants to read
+        cmp byte [write_enable], 1
+        je .write
         mov al, 0x20
-        out dx, al 
-    ready_check:
-        .spinup_check:
+        jmp send_port_1f7
+
+        .write:
+            mov al, 0x30
+        
+        send_port_1f7:
             mov dx, ATA_IO_Base + 7
-            in al, dx
-            ;check for 15 sec delay, after 15 sec, ask user if they want to stop disk io
-            test al, bsy ;change to spin up check
-            jnz .spinup_check
-        .ready_check:
-            mov dx, ATA_IO_Base + 7
-            in al, dx
-            test al, rdy
-            jz .ready_check
+            out dx, al
             ret
+
+; \\error_handling//
+    check_status: ; sets ch if there was a problem, bh = data ready (incase we missed), bl= busy, try later
+        read_status:
+            mov dx, ATA_IO_Base +7
+            in al, dx
+            mov [status], al
+            ret
+
+        status_ch_error: 
+            mov al, [status]
+            test al, err
+            jz ret_disk
+            call reset_drive
+            mov ch, 1
+            jmp ret_disk
+            
+        status_ch_index:
+            mov al, [status]
+            test al, idx
+            jz ret_disk
+            call reset_drive
+            mov ch, 1
+            jmp ret_disk
+        
+        status_ch_corrected_data:
+            mov al, [status]
+            test al, corr
+            jz ret_disk
+            call reset_drive
+            mov ch, 1
+            jmp ret_disk
+            
+        status_ch_DRQ:
+            mov al, [status]
+            test al, drq
+            jz ret_disk
+            mov bh, 1
+            jmp ret_disk
+        
+        status_ch_SRV:
+            mov al, [status]
+            test al, srv
+            jz ret_disk
+            mov bl, 1
+            jmp ret_disk
+
+        status_ch_drive_fault:
+            mov al, [status]
+            test al, Df
+            jz ret_disk
+            call reset_drive
+            mov ch, 1
+            jmp ret_disk
+
+        status_ch_ready:
+            mov al, [status]
+            test al, rdy
+            jnz ret_disk
+            jmp status_ch_ready ; we want to loop this until ready. no polling
+        
+        status_ch_busy: ;we want to check this every so often
+            mov al, [status]
+            test al, bsy
+            jz ret_disk
+            mov bl, 1
+            jmp ret_disk
+        
+        ret_disk:
+            ret
+
+    reset_drive:
+        mov dx, 0x3f6 ; control reg, we want to send nIEN so that we dont get yelled at by IRQs
+        mov al, 0x06
+        out dx, al ; send mass reset of every drive on the bus :troll:
+        mov cx, 10
+        mov dx, ATA_IO_Base +7
+        delay_5us_ata:
+            in al, dx
+            in al, dx
+            in al, dx
+            in al, dx
+            loop delay_5us_ata
+        mov al, 0x00 ;set the others to empty
+        mov dx, 0x3f6
+        out dx, al
+        ret
+
 ; eax = handler address
 ; edi = index
 make_idt_entry:
@@ -756,33 +873,51 @@ idt_ptr:
     gpf db '[E]0x0D general protection fault',0
     pf db '[E]0x0E Page fault, mem acc fail',0
     noCom db 'no command found!',0
-    LBA_address dd 0x0d
+    noFil db 'no File found!',0
+    no_space db 'no space left!',0
+    Gdt_init db 'gdt init',0
+    Idt_init db 'idt init',0
+    failed db 'FAILED',0
+    ok db 'OK',0
+    status db 0
+    LBA_address dd 0x6f
     ATA_IO_Base equ 0x1f0  
-    sector dd 0            
-    rdy equ 0x40 ;ready
-    bsy equ 0x80 ;busy
-    def equ 0x20 ;device fault
-    err equ 0x01 ;command fail
-    buffer_disk equ 0x100000
-    vidmemend equ 0xB8F9E
-    disk_able dd 1
-    vid_counter dd -1
-    color_attr_buffer db 0
-    buffer_ptr dd 0xB8000
+    sector db 0            
+    write_enable db 0
+    dest dd 0
+    err  equ 0b00000001
+    idx  equ 0b00000010
+    corr equ 0b00000100
+    drq  equ 0b00001000
+    srv  equ 0b00010000
+    Df   equ 0b00100000
+    rdy  equ 0b01000000
+    bsy  equ 0b10000000
+    ;vga driver
+        print_char equ 0b00000001
+        loop_func  equ 0b00000010
+        res_scr    equ 0b00000100
+        clr_scr    equ 0b00001000
+        N_line     equ 0b00010000
+        start_vga  equ 0b00100000
+        print equ 0x1c8000
+    vid_counter dd 0 ;keyboard
     CMD_string dd 0x530
     cursor_timer db 10               ; countdown timer (ticks before toggle)
     cursor_vis   db 1                ; cursor visible flag (1=visible, 0=invisible)
-    enter_en dd 0 ; 1= enter was pressed
+    enter_en equ 0x500 ; 1= enter was pressed
     commands_len_2:
         dd 'ls','cd',0, 0
     commands_len_3:
         dd 'clr', 0
     commands_len_4:
-        db 'echo','ping','help',0
+        db 'echo', 'ping','help','load', 0
     handler_table4:
         dd echo
         dd ping
         dd help
+        dd load
+        ;dd make
     handler_table3:
         dd clear
     handler_table2:
@@ -793,4 +928,15 @@ idt_ptr:
         db 'q','w','e','r','t','y','u','i','o','p',"[","]",2,'^','a','s','d','f'
         db 'g','h','j','k','l',';',0,0,0,'/','z','x','c','v','b','n','m',',','.','\',0,0,0,0x20
         times (128-48) db 0
-times 5120 - ($ - $$) db 0
+    read_loc dd 0
+    lookup_table:
+        db "memm"
+
+        times 512 - 8 db 0
+    file_table:
+        dd 0x0000007E
+        dd 0x00000001
+        db 0b00111001
+        
+        times 4608 - 9 db 0 ; exactly 9 times 512 bytes
+times 51200 - ($ - $$) db 0xff
