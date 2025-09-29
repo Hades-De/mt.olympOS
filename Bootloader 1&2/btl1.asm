@@ -2,9 +2,9 @@
 [org 0x7C00]
 
 start:
-    cli
-    mov sp, 0x7F00
-    sti
+    cli 
+    mov sp, 0x7F00 ; set the stack
+    sti 
     in al, 0x92
     or al, 00000010b
     and al, 11111110b
@@ -12,7 +12,7 @@ start:
     ; Save drive number
     mov [boot_drive], dl
 
-    hceck_LBA_supprt: ;if supported,return carry0
+    ; check_LBA_support if supported,return carry0
         mov ax, 0x41
         mov bx, 0x55AA ;add back dl if broken
         int 0x13
@@ -28,16 +28,16 @@ start:
     mov dword [dap+12], 0     ; LBA high
 
     ; Call INT 13h, AH=42h (Extended Read)
-    mov si, dap
-    mov dl, [boot_drive]
+    mov si, dap ;move the DAP into SI
+    mov dl, [boot_drive] ;move the drive number back into dl
     mov ah, 0x42
     int 0x13
-    jc disk_error
-    cmp ah, 0
+    jc disk_error ;failed to read from the disk
+    cmp ah, 0 ;ah 0 = fail
     jne disk_error
     jmp secondstage
 
-no_lba_supprt:;; will also transform LBA > CHS
+    no_lba_supprt:;; will also transform LBA > CHS
             mov dl, [boot_drive]
             cmp dl, 0x80
             jl disk_error ;;we do this because CHS doesnt like floppy detecting like this

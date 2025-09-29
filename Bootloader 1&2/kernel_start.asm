@@ -7,7 +7,7 @@
         lgdt [gdt_descriptor]
         mov eax, cr0
         or eax, 1
-        mov cr0, eax
+        mov cr0, eax ;enable 32 bits
         jmp dword 0x08:seg_regs_setup   ; Jump to loaded sector
 
         gdt_start:
