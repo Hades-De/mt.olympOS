@@ -1,0 +1,42 @@
+VGA driver documentation
+
+Location:
+[/"kernel modules"/VGA_driver.asm]
+
+Last updated
+yyyy/mm/dd
+[2025/10/13]
+
+Overview:
+Handles all output to the screen via 80x25 VGA text mode.
+Responsible for printing characters, strings, and managing
+the screen buffer. Essentially everything visible on screen
+goes through this driver.
+
+Registers used:
+EAX-> AL, Character incase we want to print a single character,
+|---> AH, Color attribute byte
+EBX-> String if we want to print a String
+EDX-> DL, Control flags
+ESI-> Video memory position (you *can* change it outside of this driver, because it just sets it back to where it was each call!)
+EDI-> Line counter, As with ESI, You can reset it outside the driver!
+
+Flags:
+00000001 - print_char (print one char)
+00000010 - loop_func  (loop string)
+00000100 - res_scr    (reset pointer)
+00001000 - clr_scr    (clear screen)
+00010000 - N_line     (new line)
+00100000 - start_vga  (init VGA)
+01000000 - Unused
+10000000 - Unused
+
+Known issues:
+Doesnt support variables inside the string, like 'num' into the actual number, (base10 numbers)
+Sometimes if the string isn't in the right part of the other driver/application, it cuts it in half
+No scrolling
+
+Planned:
+Add /n support
+fix the half string bug, or make it so that every application has the requirement of putting all the strings at the first part of the data
+add the base10 variable print
