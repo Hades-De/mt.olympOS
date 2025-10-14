@@ -3,7 +3,7 @@
 ; has to set leds, get/set scancode, identify keyboard (too lazy to for now), set typematic rate and delay
 ; enable/disable scanning, and self tests
 ;dl table: 0= init, 1= check/work on one byte on the list
-[org 0x1c8200]
+[org 0]
 [bits 32]
 
 test eax, eax

@@ -141,35 +141,14 @@ cli
         mov ah, 0x0f
         mov dl, print_char | loop_func
         call print
+        mov dl, N_line
+    call print
+
+        xor edi, edi
+        call 0x1c8400
 
     Kernel_loop:
-        print_seconds_bottom_right:
-            mov eax, seconds_passed
-
-            mov edi, 0xB8F00 + 158  ; start at bottom-right (col 79)
-            mov ecx, 0               ; digit counter
-
-            cmp eax, 0
-            jne .convert
-            mov byte [edi], '0'
-            mov byte [edi+1], 0x07  ; attribute: light grey on black
-            jmp .done
-
-        .convert:
-            mov ebx, 10              ; divisor
-        .next_digit:
-            xor edx, edx
-            div ebx                  ; EAX = EAX/10, EDX = remainder
-            add dl, '0'
-            mov [edi], dl
-            mov byte [edi+1], 0x07
-            sub edi, 2               ; move left one character
-            inc ecx
-            cmp eax, 0
-            jne .next_digit
-
-        .done:
-            jmp Kernel_loop
+        jmp $
 
 
 tet:

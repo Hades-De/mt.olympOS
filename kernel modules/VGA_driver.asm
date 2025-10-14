@@ -2,6 +2,8 @@
 ;dl table    00000001 print single char,  00000010 loop current set for cx times(not for printing strings, that expects ebx to be set), 00000100 reset screen pointer, 00001000 clear screen
 ;dl table    00010000 new line ,00100000 ????,01000000 ???,10000000 ?????
 ;add full scrolling screen
+;add detection for stuff like 'N' where N would be any base10 number ofc, so it'd accept it as a variable number instead of hardcoded numbers
+;theres a bug where it only displays half a string for some reason. fix!!!
 [org 0x1C8000]
 [bits 32]
 sort_dl:
