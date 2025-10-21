@@ -11,20 +11,19 @@ jnz reset
 mov eax, ecx ;ecx is the amount of 4kb sectors we need, not yet added. will add this later, 
 
 TESTING:
-    mov dword [total_pages_used], 0x1
     mov byte [pages], 2
-    mov byte [total_possible_pages], 0x02
-    mov edi, 16
-    mov dword [total_possible_pages + edi], 0x01
-    add edi, 16
-    mov dword [total_possible_pages + edi], 0x01
+    mov byte [total_possible_pages], 0x01
+    mov edi, 0x10000
+    mov dword [total_possible_pages + edi], 0x03
+    add edi, 0x10000
+    mov dword [total_possible_pages + edi], 0x02
     mov byte [used_map + 0], 0       ; used
-    mov byte [used_map + 1], 1       ; free
-    mov byte [used_map + 2 + 16], 1       ; used
-    mov byte [used_map + 3 + 16], 0       ; free
-    mov byte [used_map + 4 + 32], 0       ; free
-    mov byte [used_map + 5 + 32], 1       ; used
-    mov byte [used_map + 6 + 32], 0       ; free
+    mov byte [used_map + 1], 0       ; free
+    mov byte [used_map + 2], 0       ; used
+    mov byte [used_map + 3], 1       ; free
+    mov byte [used_map + 0 + 0x10000], 1      ; free
+    mov byte [used_map + 1 + 0x10000], 0       ; used
+    mov byte [used_map + 2 + 0x10000], 1       ; free
 
 jmp alloc_mem
 
@@ -47,16 +46,9 @@ alloc_mem: ;alloc mem routine
             cmp [pages], ebx ; in cases they do have it, but scattered, my other lines will help-2/3
             jg .add_16 ; but this just just the existance of said length in this part, also stops it from going into space 3/3
             ;this does a very small safety check, later i will add a better one that checks the current pages +whatever it wants, it its too much it'd reject
-            pusha
-            ;call check_used_pages
-            popa
-            mov ebx, [pages]
-            add ebx, [total_pages_used]
-            cmp ebx, [total_possible_pages + edi]
-            jg .add_16
             mov edx, [offset_length_finder]
             cmp edx, [total_possible_pages + edi]
-            jge .add_16
+            je .add_16
             mov ah, [used_map + edx + edi]; moves the current byte of the map of whats used and what isnt into ah
             cmp ah, 0 ; 0= unused
             jne .retry ; empties the map, and retries it with the next entry
@@ -79,6 +71,8 @@ alloc_mem: ;alloc mem routine
                 jmp .reset_loop ;jumps back until ecx=0
 
         .add_16:
+            mov esi, [offset_length_finder]; moves the value into esi
+            inc dword [offset_length_finder] ;increases the dword by 1, because thats the value it should check next
             .reset_loop_16:
                 cmp ecx, 0; compares ecx to 0 INCASE THIS IS THE FIRST ONE
                 je .continue;if it is, we just jump back
@@ -87,8 +81,9 @@ alloc_mem: ;alloc mem routine
                 dec esi ;decreases esi, because we want to go down the map
                 jmp .reset_loop_16 ;jumps back until ecx=0
             .continue:
-                add edi, 16 ;adds (in this case 16, could be any value, its highly dependend on the largest page number we have)
+                add edi, 0x10000 ;adds (in this case 2^16, could be any value, its highly dependend on the largest page number we have)
                 mov edx, [total_possible_pages + edi] ;we check if its full of zero's
+                mov [offset_length_finder], ecx
                 cmp edx, 0
                 jne .loop ; if its not, its safe to assume its still a valid page
                 mov ebx, full_pages
@@ -97,30 +92,6 @@ alloc_mem: ;alloc mem routine
                 call print
                 mov ecx, 1 ; moves the error bit into ecx
                 ret
-
-        check_used_pages:
-            mov dword [total_pages_used], 0
-            xor ecx, ecx
-            .loop:
-                cmp ecx, [total_possible_pages + edi] ;checks if we have checked the max amount of pages here
-                je .return
-                mov edx, [offset_length_finder]
-                mov ah, [used_map + edx + edi]; moves the current byte of the map of whats used and what isnt into ah
-                inc ecx
-                cmp ah, 1 ; 1= used
-                je .add_to_amount
-                inc dword [offset_length_finder]
-                jmp .loop
-
-            
-                .add_to_amount:
-                    inc dword [total_pages_used]
-                    inc dword [offset_length_finder]
-                    jmp .loop
-
-                .return:
-                    ret
-
 
         found_loc:
             mov ecx, [offset_length_finder]
@@ -140,6 +111,7 @@ alloc_mem: ;alloc mem routine
             mov dl, print_char | loop_func
             call print
             pop edi
+            shr edi, 12
             call load_address
             add ecx, [offset_length_finder] ;adds the offset aswell
             mov [outputs], ecx ;moves the outputs to edx:ecx
@@ -151,23 +123,16 @@ load_address:;WHEN CALLING THESE. MAKE SURE EDI IS ALWAYS SET THE SAME BOTH CALL
     mov edx, [map_start + edi+ 4] ; mov the high bytes of the adress into edx
     ret
 
-update_used_list_disable:
-    shr edi, 4 ;basically div by 4
-    mov byte [used_map + edi], 0 
-    shl edi, 4 ; basically mult by 4
-    ret
-
 load_lengths:;WHEN CALLING THESE. MAKE SURE EDI IS ALWAYS SET THE SAME BOTH CALLS!!!
     mov ecx, [map_start + edi + 8] ; mov the low bytes of the length into ecx
     mov edx, [map_start + edi + 12] ; mov the high bytes of the length into edx
     ret
 
-reset: ;resets the sector map with usable sectors, incase we need to look again or an error/corruption
+reset: ;resets the sector map with usable sectors, incase we need to look again or an error/corruption, or if we want to set the start
 
 
 gave db "gave out 'num' of pages, at 'num1'", 0
 full_pages db "[E]pages are full, try again later", 0
-total_pages_used dd 0
 offset_length_finder dd 0
 pages dd 0
 total_possible_pages dd 0
