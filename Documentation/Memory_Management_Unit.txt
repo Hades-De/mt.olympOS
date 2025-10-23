@@ -1,0 +1,40 @@
+MMU documentation
+
+Location:
+[/"kernel modules"/MemHandler_assigner.asm] & [/"kernel modules"/memory_map_create.asm]
+
+Last updated
+yyyy/mm/dd
+[2025/10/23]
+
+Overview:
+sorts the map it goes from bios, then allocates it via 4Kib pages, 
+
+Registers used:
+All are used, but the inputs are:
+If allloc:
+ECX = amount of 4Kib pages
+
+If unalloc:
+ECX = low byte of the Location
+EDX = high byte
+EDI = the offset
+
+
+Flags:
+00000000 - alloc      (allocates the amount of pages in ECX, returns the Location in ecx:edx, offset in edi. AND returns the Location in 0x550)
+00000001 - reset      (resets the map, automatically sets the first 640kib of the bios map as "used")
+00000010 - Unused
+00000100 - Unused
+00001000 - Unused
+00010000 - Unused
+00100000 - Unused 
+01000000 - Unused
+10000000 - Unused
+
+Known issues:
+No unalloc yet.
+
+Planned:
+add unalloc support
+add some bitflag to give info about the ram usage

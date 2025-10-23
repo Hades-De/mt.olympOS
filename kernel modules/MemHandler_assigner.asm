@@ -8,10 +8,10 @@
 ;;to do, still have to make an unalloc
 test dl, reset_flag
 jnz reset
-mov [pages], ecx ;ecx is the amount of 4kb sectors we need, not yet added. will add this later, 
 jmp alloc_mem
 
 alloc_mem: ;alloc mem routine
+    mov [pages], ecx ;ecx is the amount of 4kb sectors we need, not yet added. will add this later, 
     cmp dword [pages], 0
     jne .pass
     ret
@@ -142,6 +142,10 @@ reset: ;resets the sector map with usable sectors, incase we need to look again 
         mov ah, 0x0f
         mov dl, print_char | loop_func
         call print
+        mov dl, N_line
+        call print
+        mov ecx, 159 ;because we NEVER want to give out the first 640 Mib
+        call alloc_mem
         ret
 
 

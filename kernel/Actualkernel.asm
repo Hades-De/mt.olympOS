@@ -147,11 +147,6 @@ cli
         xor edi, edi
         mov dl, 0b00000001
         call 0x1c8400
-        mov dl, N_line
-        call print
-
-        mov ecx, 159
-        call 0x1c8400
         mov ecx, 14
         call 0x1c8400
 
