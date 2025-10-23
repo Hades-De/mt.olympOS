@@ -8,23 +8,7 @@
 ;;to do, still have to make an unalloc
 test dl, reset_flag
 jnz reset
-mov eax, ecx ;ecx is the amount of 4kb sectors we need, not yet added. will add this later, 
-
-TESTING:
-    mov byte [pages], 2
-    mov byte [total_possible_pages], 0x01
-    mov edi, 0x10000
-    mov dword [total_possible_pages + edi], 0x03
-    add edi, 0x10000
-    mov dword [total_possible_pages + edi], 0x02
-    mov byte [used_map + 0], 0       ; used
-    mov byte [used_map + 1], 0       ; free
-    mov byte [used_map + 2], 0       ; used
-    mov byte [used_map + 3], 1       ; free
-    mov byte [used_map + 0 + 0x10000], 1      ; free
-    mov byte [used_map + 1 + 0x10000], 0       ; used
-    mov byte [used_map + 2 + 0x10000], 1       ; free
-
+mov [pages], ecx ;ecx is the amount of 4kb sectors we need, not yet added. will add this later, 
 jmp alloc_mem
 
 alloc_mem: ;alloc mem routine
@@ -95,6 +79,8 @@ alloc_mem: ;alloc mem routine
 
         found_loc:
             mov ecx, [offset_length_finder]
+            add ecx, 1
+            sub ecx, [pages]
             shl ecx, 12 ; basically mult by ^12, because we want the value of ecx to be multiplied by 4096
             mov [offset_length_finder], ecx
             xor ecx, ecx
@@ -109,6 +95,8 @@ alloc_mem: ;alloc mem routine
             mov ebx, pages
             mov ah, 0x0f
             mov dl, print_char | loop_func
+            call print
+            mov dl, N_line
             call print
             pop edi
             shr edi, 12
@@ -129,19 +117,44 @@ load_lengths:;WHEN CALLING THESE. MAKE SURE EDI IS ALWAYS SET THE SAME BOTH CALL
     ret
 
 reset: ;resets the sector map with usable sectors, incase we need to look again or an error/corruption, or if we want to set the start
+    xor edi, edi
+    .loop_detect:
+        call load_lengths
+        or ecx, edx
+        je .return ;no more pages to sort or anything
+        call .write_val_pages
+        add edi, 16
+        jmp .loop_detect
+
+    .write_val_pages:
+        call load_lengths
+        shr ecx, 12 ;we only care about ecx at this time, since i dont want to add a full 4gb max yet
+        shl edi, 12
+        mov dword [total_possible_pages + edi], ecx
+        shr edi, 12
+        xor ecx, ecx
+        xor edx, edx
+        ret
+
+    .return:
+        xor dl, dl
+        mov ebx, sorted_list
+        mov ah, 0x0f
+        mov dl, print_char | loop_func
+        call print
+        ret
 
 
 gave db "gave out 'num' of pages, at 'num1'", 0
 full_pages db "[E]pages are full, try again later", 0
+sorted_list db "sorted the memory list!", 0
 offset_length_finder dd 0
 pages dd 0
 total_possible_pages dd 0
-map_start equ 0x1c9000
+map_start equ 0x600
 reset_flag equ 0b00000001
 unalloc_flag equ 0b00000010
 used_map equ 0x70000
-sector_map_start equ 0x600
-sector_map_end equ 0x7BFD ; it should be 0x7bff, but since its so close to our stack, we want that extra safety buffer
 outputs equ 0x550
     ;vga driver
         print_char equ 0b00000001

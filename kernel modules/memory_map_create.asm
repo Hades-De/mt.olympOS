@@ -71,5 +71,5 @@ storage_save dd 0
 reserved_save dd 0 
 map_start equ 0x8000
 reserved_ram equ 0x5000
-usable_ram equ 0x1c9000
+usable_ram equ 0x600
 times 512 - ($ - $$) db 0
