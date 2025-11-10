@@ -8,6 +8,8 @@
 ;;to do, still have to make an unalloc
 test dl, reset_flag
 jnz reset
+test dl, unalloc_flag
+jnz unalloc
 jmp alloc_mem
 
 alloc_mem: ;alloc mem routine
@@ -87,7 +89,15 @@ alloc_mem: ;alloc mem routine
             ret ; return to alloc_mem
 
         give_out_alloc: ; gives out eax:ebx, and edi as an offset
+            shr edi, 12
+            call load_address
+            add ecx, [offset_length_finder] ;adds the offset aswell
+            mov [outputs], ecx ;moves the outputs to edx:ecx
+            mov [outputs + 4], edx
             push edi
+            mov edi, [pages]
+            mov [0x500], edi
+            mov [0x504], ecx
             mov ebx, gave
             mov ah, 0x0f
             mov dl, print_char | loop_func
@@ -99,11 +109,6 @@ alloc_mem: ;alloc mem routine
             mov dl, N_line
             call print
             pop edi
-            shr edi, 12
-            call load_address
-            add ecx, [offset_length_finder] ;adds the offset aswell
-            mov [outputs], ecx ;moves the outputs to edx:ecx
-            mov [outputs + 4], edx
             ret
 
 load_address:;WHEN CALLING THESE. MAKE SURE EDI IS ALWAYS SET THE SAME BOTH CALLS!!!
@@ -148,8 +153,9 @@ reset: ;resets the sector map with usable sectors, incase we need to look again 
         call alloc_mem
         ret
 
-
-gave db "gave out 'num' of pages, at 'num1'", 0
+unalloc:
+    ; subtract the offset and get the number of pages aswell. 
+gave db "gave out",0x60, 0x20, 0x60," of pages, at `num1`", 0
 full_pages db "[E]pages are full, try again later", 0
 sorted_list db "sorted the memory list!", 0
 offset_length_finder dd 0

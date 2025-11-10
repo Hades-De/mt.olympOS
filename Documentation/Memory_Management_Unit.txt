@@ -19,7 +19,7 @@ If unalloc:
 ECX = low byte of the Location
 EDX = high byte
 EDI = the offset
-
+EBX = page amount
 
 Flags:
 00000000 - alloc      (allocates the amount of pages in ECX, returns the Location in ecx:edx, offset in edi. AND returns the Location in 0x550)

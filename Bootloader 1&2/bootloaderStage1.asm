@@ -176,7 +176,7 @@ secondstage:
 
         disk_error:
             mov ah, 0x0E
-            mov al, 'E'
+            mov al, 'D'
             int 0x10
             jmp $
 
