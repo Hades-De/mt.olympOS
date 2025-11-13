@@ -132,7 +132,7 @@ cli
     sti
     init_list:
         int 0x01 ; test IDT
-        call 0x1c8200
+        call 0x10ca00
         call Convert_to_dec
         mov ah, 0x0f
         mov dl, print_char | loop_func
@@ -146,9 +146,15 @@ cli
 
         xor edi, edi
         mov dl, 0b00000001
-        call 0x1c8400
-        mov ecx, 14
-        call 0x1c8400
+        call 0x10cc00
+        mov ecx, 14 ; last page being used rn, 512/4096
+        call 0x10cc00
+        mov edx, 0x349B2E
+        mov dl, 0b00000001
+        call 0x10ce00
+        xor dl, dl
+        mov ecx, 1
+        call 0x10cc00
 
     Kernel_loop:
         jmp $
@@ -373,20 +379,11 @@ Convert_to_dec:
 
 ;======KEYBOARD, TIMER, DISK HANDLERS======
 timer:
-    inc dword [timer_counter]
-    cmp dword [timer_counter], 18
-    jl .done
-
-    mov dword [timer_counter], 0
-    inc dword [seconds_passed]   ; 1 second passed!
-
-.done:
-    ; send EOI to PIC
     mov al, 0x20
     out 0x20, al
     iret
 
-screen_functions:
+;init indicators
     init_ok:
         mov ah, 0x0f ; white
         mov dl, print_char
@@ -527,7 +524,7 @@ idt_ptr:
         clr_scr    equ 0b00001000
         N_line     equ 0b00010000
         start_vga  equ 0b00100000
-        print      equ 0x1c8000
+        print      equ 0x10c800
     read_loc dd 0
     buffer_ptr dd 0xB8F00
     vidmemend equ 0xB8F9E

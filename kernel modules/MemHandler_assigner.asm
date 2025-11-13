@@ -1,4 +1,4 @@
-[org 0x1c8400]
+[org 0x10cc00]
 [bits 32]
 ;exit regs
 ;eax:ebx, when it found usable memory
@@ -103,7 +103,11 @@ alloc_mem: ;alloc mem routine
             mov dl, print_char | loop_func
             call print
             mov ebx, pages
-            mov ah, 0x0f
+            mov ah, 0x0e
+            mov dl, print_char | loop_func
+            call print
+            mov ebx, [0x500]
+            mov ah, 0x0e
             mov dl, print_char | loop_func
             call print
             mov dl, N_line
@@ -155,7 +159,7 @@ reset: ;resets the sector map with usable sectors, incase we need to look again 
 
 unalloc:
     ; subtract the offset and get the number of pages aswell. 
-gave db "gave out",0x60, 0x20, 0x60," of pages, at `num1`", 0
+gave db "gave out of pages, at", 0
 full_pages db "[E]pages are full, try again later", 0
 sorted_list db "sorted the memory list!", 0
 offset_length_finder dd 0
@@ -173,5 +177,5 @@ outputs equ 0x550
         clr_scr    equ 0b00001000
         N_line     equ 0b00010000
         start_vga  equ 0b00100000
-        print      equ 0x1c8000
+        print      equ 0x10c800
 times 1024 - ($ - $$) db 0

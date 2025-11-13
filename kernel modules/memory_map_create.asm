@@ -1,6 +1,6 @@
 [bits 32]
 
-[org 0x1c8200]
+[org 0x10cA00]
 xor edi, edi
 load_map:
     mov esi, [map_start + edi + 16] ; edi is the offset

@@ -4,7 +4,7 @@
 ;add full scrolling screen
 ;add detection for stuff like 'N' where N would be any base10 number ofc, so it'd accept it as a variable number instead of hardcoded numbers
 ;theres a bug where it only displays half a string for some reason. fix!!!
-[org 0x1C8000]
+[org 0x10C800]
 [bits 32]
 sort_dl:
     mov esi, [current_loc_vid]
