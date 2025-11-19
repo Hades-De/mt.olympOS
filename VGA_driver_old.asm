@@ -54,7 +54,7 @@ sort_dl:
                         jmp .return
                     .set_reset_curs:
                         xor dl, dl
-                        mov dl, res_scr
+                        mov dl, start_vga
                         jmp sort_dl
                     .loop_char:
                         mov al, [ebx]
@@ -111,7 +111,7 @@ sort_dl:
 Vga_invalid db 'No VGA code found',0   
 color_ar_buffr db 0
 line_ctr dd 0
-vidmemend equ 0xB8F9E
+vidmemend equ 0xB8FA0
 current_loc_vid dd 0xB8000
 space equ 0x20
 print_char equ 0b00000001

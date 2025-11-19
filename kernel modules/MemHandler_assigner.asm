@@ -159,7 +159,7 @@ reset: ;resets the sector map with usable sectors, incase we need to look again 
 
 unalloc:
     ; subtract the offset and get the number of pages aswell. 
-gave db "gave out of pages, at", 0
+gave db "gave out of pages, at",0x27, 11, 0x27, 0
 full_pages db "[E]pages are full, try again later", 0
 sorted_list db "sorted the memory list!", 0
 offset_length_finder dd 0

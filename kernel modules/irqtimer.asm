@@ -1,20 +1,20 @@
-[org 0x10ce00]
+[org 0x10d000]
 [bits 32]
 ;gives a blinking time for the cursor
 ;gives a timer for the priobased Round Robin scheduler
-timer_decoder:
-    mov [usage], edx ; first 8 bits are the control we sent, next two are the 
-    test dl, init
-    jnz init_timer
+    testt:
+        mov [usage], edx ; first 8 bits are the control we sent, next two are the 
+        test dl, init
+        jnz init_timer
 
     init_timer:
-        xor edx, edx
+        xor ebx, ebx
         xor dl, dl
         mov dx, 0x43
         mov al, [usage]
         out dx, al
         mov bl, [usage]
-        test bl, 0b0000001 
+        test bl, 0b00000001 
         jnz .chan0
         test bl, 0b00000010
         jnz .chan2
@@ -26,6 +26,7 @@ timer_decoder:
             out dx, al
             mov al, [usage+2]
             out dx, al
+            mov ebx, set_timer
             jmp .return
         
         .chan2:
@@ -34,20 +35,22 @@ timer_decoder:
             out dx, al
             mov al, [usage+2]
             out dx, al
+            mov ebx, set_timer
             jmp .return
 
         .error:
             mov ebx, error_invalid_chan
-            mov ah, 0x0f
-            mov dl, print_char | loop_func
-            call print
             jmp .return
 
         .return:
+            mov ah, 0x0f
+            mov dl, print_char | loop_func
+            call print
             xor dl, dl ;we just make sure dl is always reset before we exit, just incase we forget anywhere
             ret
 
 error_invalid_chan db "The channel you gave was invalid, please try again with a valid channel",0
+set_timer db "The timer has been set!",0
 usage dd 0x00
 init equ 0b00000001
     ;vga driver
@@ -58,4 +61,4 @@ init equ 0b00000001
         N_line     equ 0b00010000
         start_vga  equ 0b00100000
         print      equ 0x10c800
-times 512 db 0 
+times 512 - ($ - $$) db 0

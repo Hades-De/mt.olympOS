@@ -35,35 +35,6 @@ sort_dl:
                 cmp al, space
                 jne .print
                 mov al, 0x00
-
-            .var_detext:
-                cmp al, 0x60
-                jne .print
-                cmp cl, 1
-                je .pass
-                push ebx
-                inc cl
-                pusha
-                .Convert_to_dec:
-                    mov eax, [0x500]
-                    mov ecx, 10        ; divisor
-
-                .convert_loop:
-                        xor edx, edx
-                        div ecx            ; divide eax by 10, quotient in eax, remainder in edx
-                        add dl, '0'        ; convert remainder to ASCII
-                        mov [ebx], dl
-                        dec ebx
-                        test eax, eax
-                        jnz .convert_loop
-
-                        inc ebx            ; ebx now points to the first character of the string
-                        jmp $
-                        popa
-                        jmp .print
-                .pass:
-                    xor cl, cl
-                    pop ebx
                 .print:
                     mov word [esi], ax
                     add esi, 2
@@ -83,7 +54,7 @@ sort_dl:
                         jmp .return
                     .set_reset_curs:
                         xor dl, dl
-                        mov dl, res_scr
+                        mov dl, start_vga
                         jmp sort_dl
                     .loop_char:
                         mov al, [ebx]
@@ -141,7 +112,7 @@ Vga_invalid db 'No VGA code found',0
 color_ar_buffr db 0
 line_ctr dd 0
 buf dw 0x00
-vidmemend equ 0xB8F9E
+vidmemend equ 0xB8FA0
 current_loc_vid dd 0xB8000
 space equ 0x20
 print_char equ 0b00000001

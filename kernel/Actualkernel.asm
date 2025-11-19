@@ -127,66 +127,39 @@ cli
             mov al, 0b10111111 
             out 0xA1, al
 
-;======KERNEL======
+;======KERNEL======  
+    call 0x10ca00
+    call Convert_to_dec
+    mov ah, 0x0f
+    mov dl, print_char | loop_func
+    call print
+    mov ebx, RAM
+    mov ah, 0x0f
+    mov dl, print_char | loop_func
+    call print
+    mov dl, N_line
+    call print
+    mov ah, 0x0f
+    mov dl, print_char | loop_func
+    call print
+    xor edi, edi
+    mov dl, 0b00000001
+    call 0x10cc00
+    mov ecx, 13 ; last page being used rn, left 512bytes
+    call 0x10cc00
+    mov ebx, 0x349B2E
+    mov dl, 0b00000001
+    call 0x10d000 
+    mov dl, N_line
+    call print
     lidt [idt_ptr]
     sti
     init_list:
         int 0x01 ; test IDT
-        call 0x10ca00
-        call Convert_to_dec
-        mov ah, 0x0f
-        mov dl, print_char | loop_func
-        call print
-        mov ebx, RAM
-        mov ah, 0x0f
-        mov dl, print_char | loop_func
-        call print
-        mov dl, N_line
-        call print
-
-        xor edi, edi
-        mov dl, 0b00000001
-        call 0x10cc00
-        mov ecx, 14 ; last page being used rn, 512/4096
-        call 0x10cc00
-        mov edx, 0x349B2E
-        mov dl, 0b00000001
-        call 0x10ce00
-        xor dl, dl
-        mov ecx, 1
-        call 0x10cc00
 
     Kernel_loop:
-        jmp $
+        jmp Kernel_loop
 
-
-tet:
-    xor ebx, ebx
-    xor edi, edi
-    find_non_used_map:
-    mov esi, [map_start + edi + 16] ; load current map (only the used byte)
-    test esi, esi ;test if its used
-    je not_used
-    test eax, eax ;test if eax si empty, if it is, pretty likely its out of maps
-    je nospace
-    add edi, 32
-    jmp find_non_used_map
-
-not_used:
-    mov ebx, free
-    mov ah, 0x0f
-    mov dl, print_char | loop_func
-    call print
-   ;pop ecx
-    ret
-
-nospace:
-    mov ebx, nospc
-    mov ah, 0x0f
-    mov dl, print_char | loop_func
-    call print
-    ;pop ecx
-    ret
 
 Convert_to_dec:
         mov eax, [0x500]
@@ -379,6 +352,10 @@ Convert_to_dec:
 
 ;======KEYBOARD, TIMER, DISK HANDLERS======
 timer:
+    mov al, 'a'
+    mov ah, 0x0f
+    mov dl, print_char
+    call print
     mov al, 0x20
     out 0x20, al
     iret
@@ -512,11 +489,8 @@ idt_ptr:
     ok db 'OK',0
     RAM db ' Bytes of ram detected!', 0
     buf dw 0x00
-    map_start equ 0x1c8600
-    nospc db "No RAM left, please wait with loading files!",0
-    free db "memory free!",0
     timer_counter dd 0
-    seconds_passed dd 0
+    testt dw 0x00
     ;vga driver
         print_char equ 0b00000001
         loop_func  equ 0b00000010
@@ -530,19 +504,4 @@ idt_ptr:
     vidmemend equ 0xB8F9E
     vid_counter dd -1
     color_attr_buffer db 0
-    lookup_table:
-        db "mem "
-        db "vga "
-        times 512 - 12 db 0
-    file_table:
-        ;memmap maker
-        dd 0x0000007E ;LBA loc
-        dd 0x00000001 ;number of sectors
-        db 0b00111001 ;file perms
-        ;vga driver
-        dd 0x0000006F
-        dd 0x00000001
-        db 0b00111101
-
-        times 4608 - 27 db 0 ; exactly 9 times 512 bytes
 times 51200 - ($ - $$) db 0xff
