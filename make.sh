@@ -13,6 +13,8 @@ nasm -f bin KEYBOARD_driver.asm -o keyboard.bin
 nasm -f bin MemHandler_assigner.asm -o memhandler.bin
 nasm -f bin memory_map_create.asm -o mem.bin
 nasm -f bin VGA_driver.asm -o VGA.bin
+nasm -f bin PID_generator.asm -o PID.bin
+nasm -f bin Lib.asm -o library.bin
 mv *.bin ../../
 cd ..
 echo kernel modules done and moved

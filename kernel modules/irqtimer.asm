@@ -2,8 +2,9 @@
 [bits 32]
 ;gives a blinking time for the cursor
 ;gives a timer for the priobased Round Robin scheduler
+;1193182/desired hz = >to hex
     testt:
-        mov [usage], edx ; first 8 bits are the control we sent, next two are the 
+        mov [usage], edx ; first 8 bits are the control we sent, next two bytes are the divisor/reload value
         test dl, init
         jnz init_timer
 
@@ -52,13 +53,12 @@
 error_invalid_chan db "The channel you gave was invalid, please try again with a valid channel",0
 set_timer db "The timer has been set!",0
 usage dd 0x00
-init equ 0b00000001
     ;vga driver
-        print_char equ 0b00000001
-        loop_func  equ 0b00000010
-        res_scr    equ 0b00000100
-        clr_scr    equ 0b00001000
-        N_line     equ 0b00010000
-        start_vga  equ 0b00100000
-        print      equ 0x10c800
+            init        equ 0b00000001
+            loop_func   equ 0b00000010
+            res_scr     equ 0b00000100
+            clr_scr     equ 0b00001000
+            N_line      equ 0b00010000
+            print_char  equ 0b00100000
+            print       equ 0x10c800
 times 512 - ($ - $$) db 0

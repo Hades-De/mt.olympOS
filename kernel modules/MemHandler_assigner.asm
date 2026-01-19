@@ -95,6 +95,9 @@ alloc_mem: ;alloc mem routine
             mov [outputs], ecx ;moves the outputs to edx:ecx
             mov [outputs + 4], edx
             push edi
+            mov edi, [0x550]
+            mov eax, 16
+            call convert_number_base
             mov edi, [pages]
             mov [0x500], edi
             mov [0x504], ecx
@@ -106,9 +109,9 @@ alloc_mem: ;alloc mem routine
             mov ah, 0x0e
             mov dl, print_char | loop_func
             call print
-            mov ebx, [0x500]
-            mov ah, 0x0e
-            mov dl, print_char | loop_func
+            mov al, ' '
+            mov ah, 0x00
+            mov dl, print_char
             call print
             mov dl, N_line
             call print
@@ -157,11 +160,35 @@ reset: ;resets the sector map with usable sectors, incase we need to look again 
         call alloc_mem
         ret
 
+convert_number_base:
+    mov ecx, eax ; ECX = base
+    mov eax, edi ; EAX = number
+    mov byte [ebx], 0x00 ; null-terminate
+    dec ebx
+
+.convert_loop:
+    xor edx, edx
+    div ecx ; EAX /= base, EDX = remainder
+
+    ; ASCII conversion using lookup table
+    mov dl, [digit_table + edx]
+    mov [ebx], dl
+    dec ebx
+
+    test eax, eax
+    jnz .convert_loop
+
+    inc ebx             ; point to first digit
+    mov eax, [ebx]
+    mov [0x521], eax
+    xor ebx, ebx
+    ret
+
 unalloc:
     ; subtract the offset and get the number of pages aswell. 
-gave db "gave out of pages, at",0x27, 11, 0x27, 0
+gave db "gave out pages at location",0x01, 0x01, 0
 full_pages db "[E]pages are full, try again later", 0
-sorted_list db "sorted the memory list!", 0
+sorted_list db "sorted the memory list!",0
 offset_length_finder dd 0
 pages dd 0
 total_possible_pages dd 0
@@ -170,12 +197,14 @@ reset_flag equ 0b00000001
 unalloc_flag equ 0b00000010
 used_map equ 0x70000
 outputs equ 0x550
+digit_table:
+    db "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     ;vga driver
-        print_char equ 0b00000001
-        loop_func  equ 0b00000010
-        res_scr    equ 0b00000100
-        clr_scr    equ 0b00001000
-        N_line     equ 0b00010000
-        start_vga  equ 0b00100000
-        print      equ 0x10c800
+            init        equ 0b00000001
+            loop_func   equ 0b00000010
+            res_scr     equ 0b00000100
+            clr_scr     equ 0b00001000
+            N_line      equ 0b00010000
+            print_char  equ 0b00100000
+            print       equ 0x10c800
 times 1024 - ($ - $$) db 0

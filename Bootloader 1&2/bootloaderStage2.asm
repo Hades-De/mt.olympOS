@@ -174,8 +174,8 @@
         call ready_check
         jmp $+2
         mov dword [LBA_address], 0x70
-        mov dword [buffer_disk], 0x10Ca00
-        mov dword [sector], 4
+        mov dword [buffer_disk], 0x10Ca00 ;0x10ca00-0x10d900 
+        mov dword [sector], 7
         jmp $+2
         call load_LBA
         jmp $+2

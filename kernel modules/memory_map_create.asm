@@ -62,7 +62,6 @@ ignore:
     add byte [empty_flag], 1
     jmp load_map
 
-
 .done:
     ret
 

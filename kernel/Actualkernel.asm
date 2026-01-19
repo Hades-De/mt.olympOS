@@ -13,7 +13,7 @@ cli
         xor di, di
         xor ax, ax
         mov esi, 0xB8000
-        mov dl, start_vga
+        mov dl, init
         call print
         mov dl, clr_scr
         call print
@@ -128,6 +128,9 @@ cli
             out 0xA1, al
 
 ;======KERNEL======  
+    mov edi, init
+    call 0x10D600
+    jmp $
     call 0x10ca00
     call Convert_to_dec
     mov ah, 0x0f
@@ -144,22 +147,32 @@ cli
     call print
     xor edi, edi
     mov dl, 0b00000001
-    call 0x10cc00
-    mov ecx, 13 ; last page being used rn, left 512bytes
-    call 0x10cc00
+    call mmu
+    mov ecx, 14 ; last page being used rn, left 512bytes
+    call mmu
     mov ebx, 0x349B2E
     mov dl, 0b00000001
     call 0x10d000 
     mov dl, N_line
     call print
+    xor ebx, ebx
+    mov cx, prio_1
+    mov bx, prio_3
+    shl ebx, 16
+    mov bx, prio_2
+    mov dl, init
+    call PID_gen
+    mov ecx, 1
+    call mmu
+    ;mov ecx, [0x550]
+    mov dword [0x510], 1
     lidt [idt_ptr]
     sti
     init_list:
         int 0x01 ; test IDT
-
     Kernel_loop:
         jmp Kernel_loop
-
+;0010ce5c
 
 Convert_to_dec:
         mov eax, [0x500]
@@ -179,7 +192,7 @@ Convert_to_dec:
                 jnz .convert_loop
 
                 inc ebx            ; ebx now points to the first character of the string
-                mov [0x500], ebx
+                mov [0x540], ebx
                 ret
 
 ;======IDT FAULT INTERRUPTS======
@@ -352,13 +365,28 @@ Convert_to_dec:
 
 ;======KEYBOARD, TIMER, DISK HANDLERS======
 timer:
-    mov al, 'a'
-    mov ah, 0x0f
-    mov dl, print_char
-    call print
-    mov al, 0x20
-    out 0x20, al
-    iret
+    .loop:
+        inc byte [0x520]
+        cmp byte [0x520], 22
+        jge .continue
+        jmp .skip
+    .continue:
+        mov byte [0x520], 0
+        cmp byte [0x522], white
+        jge .reset_color
+        inc byte [0x522]
+        jmp .continuee
+        .reset_color:
+            mov byte [0x522], 0x01
+        .continuee:
+            mov ebx, Timer_msg
+            mov ah, [0x522]
+            mov dl, print_char | loop_func
+            call print
+    .skip:
+        mov al, 0x20
+        out 0x20, al
+        iret
 
 ;init indicators
     init_ok:
@@ -465,40 +493,74 @@ idt_ptr:
     dd idt
 
 ;======VARIABLES, ERROR STRINGS, KEYBOARD MAP======
-    zero db '[E]0x00 Div by 0 error!',0
-    debug db '[D]0x01 Debug int!',0
-    nmi db '[E]0x02 Non-maskable int error!',0
-    breakp db '[D]0x03 Breakpoint int',0
-    overf db '[E]0x04 Integer overflow',0
-    bre db '[E]0x05 Bound range exceeded',0
-    inop db '[E]0x06 Invalid Opcode',0
-    dna db '[D]0x07 Device not available',0
-    df db '[E]0x08 Double fault',0
-    cso db '[E]0x09 Coprocessor seg overrun',0
-    intts db '[E]0x0A invalid TTS',0
-    snp db '[E]0x0B segment not present',0
-    ssf db '[E]0x0C stack-segment fault',0
-    gpf db '[E]0x0D general protection fault',0
-    pf db '[E]0x0E Page fault, mem acc fail',0
-    noCom db 'no command found!',0
-    noFil db 'no File found!',0
-    no_space db 'no space left!',0
+    zero db '[E]0x00 Div by 0 error!'
+    debug db '[D]0x01 Debug int!'
+    nmi db '[E]0x02 Non-maskable int error!'
+    breakp db '[D]0x03 Breakpoint int'
+    overf db '[E]0x04 Integer overflow'
+    bre db '[E]0x05 Bound range exceeded'
+    inop db '[E]0x06 Invalid Opcode'
+    dna db '[D]0x07 Device not available'
+    df db '[E]0x08 Double fault'
+    cso db '[E]0x09 Coprocessor seg overrun'
+    intts db '[E]0x0A invalid TTS'
+    snp db '[E]0x0B segment not present'
+    ssf db '[E]0x0C stack-segment fault'
+    gpf db '[E]0x0D general protection fault'
+    pf db '[E]0x0E Page fault, mem acc fail'
+    noCom db 'no command found!'
+    noFil db 'no File found!'
+    no_space db 'no space left!'
     Gdt_init db 'GDT Init',0
     Idt_init db 'IDT Init',0
-    failed db 'FAILED',0
+    failed db 'FAILED'
     ok db 'OK',0
-    RAM db ' Bytes of ram detected!', 0
+    RAM db ' Bytes of ram detected!'
+    Timer_msg db "time tick "
+    text_end db 0x00
     buf dw 0x00
     timer_counter dd 0
     testt dw 0x00
+    ah_test db 0x00
+    al_test db 0x00
+    ;RRtable
+        length_string: db 0x00
+        length_string_end db 0x00
+        prio_1: ;kernel important stuff, Interrupts etc etc
+            times (128) db 0
+        prio_2: ; kernel side offers, like user IO
+            times (256) db 0
+        prio_3: ; userland 
+            times (512) db 0
     ;vga driver
-        print_char equ 0b00000001
-        loop_func  equ 0b00000010
-        res_scr    equ 0b00000100
-        clr_scr    equ 0b00001000
-        N_line     equ 0b00010000
-        start_vga  equ 0b00100000
-        print      equ 0x10c800
+            init        equ 0b00000001
+            loop_func   equ 0b00000010
+            res_scr     equ 0b00000100
+            clr_scr     equ 0b00001000
+            N_line      equ 0b00010000
+            print_char  equ 0b00100000
+            print       equ 0x10c800
+            PID_gen     equ 0x10d200
+            mmu         equ 0x10cc00
+
+        ;colors
+            black    equ 0x00
+            blue     equ 0x01
+            green    equ 0x02
+            cyan     equ 0x03
+            red      equ 0x04
+            purple   equ 0x05
+            brown    equ 0x06
+            gray     equ 0x07
+            D_gray   equ 0x08
+            L_blue   equ 0x09
+            L_green  equ 0x0a
+            L_cyan   equ 0x0b
+            L_red    equ 0x0c
+            L_purple equ 0x0d
+            yellow   equ 0x0e
+            white    equ 0x0f
+
     read_loc dd 0
     buffer_ptr dd 0xB8F00
     vidmemend equ 0xB8F9E

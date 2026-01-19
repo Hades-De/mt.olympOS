@@ -3,7 +3,8 @@
 ;dl table    00010000 new line ,00100000 ????,01000000 ???,10000000 ?????
 ;add full scrolling screen
 ;add detection for stuff like 'N' where N would be any base10 number ofc, so it'd accept it as a variable number instead of hardcoded numbers
-;theres a bug where it only displays half a string for some reason. fix!!!
+;bug where it sometimes doesnt display the variable, not urgent
+
 [org 0x10C800]
 [bits 32]
 sort_dl:
@@ -25,13 +26,26 @@ sort_dl:
         xor dl, dl 
         ret
     
-    Print_Character: ;resets eax, edi, esi, and dl and ebx when looping ,ecx
+    Print_Character: ;resets eax, edi, esi, and dl and ebx when looping
         test dl, loop_func
         jnz .loop_char
         .print_char_start:
             mov esi, [current_loc_vid]
             mov edi, [line_ctr]
-            .space_detect:
+            .variable_check:
+                cmp al, 0x01
+                jne .space_key_check
+                mov al, 0x00
+                cmp byte [var_enable], 1
+                jge .return_normal
+                inc byte [var_enable]
+                mov [text_buffer], ebx
+                mov ebx, 0x520
+                jmp .print
+            .return_normal:
+                mov ebx, [text_buffer]
+                dec byte [var_enable]
+            .space_key_check:
                 cmp al, space
                 jne .print
                 mov al, 0x00
@@ -39,26 +53,26 @@ sort_dl:
                     mov word [esi], ax
                     add esi, 2
                     cmp esi, vidmemend
-                    jae .set_reset_curs
+                    jae .reset_curs
                     .update_print_ptr:
                         inc edi
                         cmp edi, 80
-                        je .set_reset_crt
+                        je .reset_crt
                     .return:
                         mov [current_loc_vid], esi
                         mov [line_ctr], edi
                         xor dl, dl
                         ret
-                    .set_reset_crt:
+                    .reset_crt:
                         mov edi, 0
                         jmp .return
-                    .set_reset_curs:
+                    .reset_curs:
                         xor dl, dl
                         mov dl, start_vga
                         jmp sort_dl
                     .loop_char:
                         mov al, [ebx]
-                        test al, al
+                        cmp al, 0
                         je .return
                         call .print_char_start
                         inc ebx
@@ -85,7 +99,7 @@ sort_dl:
             xor dl, dl
             ret
 
-    clear_screen: ; uses eax, edx esi, resets dl
+    clear_screen: ; uses eax, ecx, esi, resets dl
         xor ax, ax
         xor dx, dx
         mov esi, 0xB8000
@@ -111,16 +125,17 @@ sort_dl:
 Vga_invalid db 'No VGA code found',0   
 color_ar_buffr db 0
 line_ctr dd 0
-buf dw 0x00
+var_enable db 0
 vidmemend equ 0xB8FA0
 current_loc_vid dd 0xB8000
 space equ 0x20
-print_char equ 0b00000001
+text_buffer dw 0x580
+start_vga equ 0b00000001
 loop_func  equ 0b00000010
 res_scr    equ 0b00000100
 clr_scr    equ 0b00001000
 N_line     equ 0b00010000
-start_vga  equ 0b00100000
+print_char  equ 0b00100000
 ;NaN equ 0b01000000
 ;NaN  equ 0b10000000
 
