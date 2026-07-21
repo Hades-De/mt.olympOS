@@ -1,12 +1,12 @@
-[org 0x10d000]
+[org 0x10cc00]
 [bits 32]
 ;gives a blinking time for the cursor
 ;gives a timer for the priobased Round Robin scheduler
 ;1193182/desired hz = >to hex
-    testt:
-        mov [usage], edx ; first 8 bits are the control we sent, next two bytes are the divisor/reload value
-        test dl, init
-        jnz init_timer
+    init:
+        mov [usage], ebx ; first 8 bits are the control we sent, next two bytes are the divisor/reload value
+        mov dword [vga_tty], eax
+        jmp init_timer
 
     init_timer:
         xor ebx, ebx
@@ -28,7 +28,9 @@
             mov al, [usage+2]
             out dx, al
             mov ebx, set_timer
-            jmp .return
+            mov eax, text_end - set_timer -1
+            call [vga_tty]
+            ret
         
         .chan2:
             mov dx, 0x42
@@ -37,28 +39,19 @@
             mov al, [usage+2]
             out dx, al
             mov ebx, set_timer
-            jmp .return
+            mov eax, text_end - set_timer -1
+            call [vga_tty]
+            ret
 
         .error:
             mov ebx, error_invalid_chan
-            jmp .return
-
-        .return:
-            mov ah, 0x0f
-            mov dl, print_char | loop_func
-            call print
-            xor dl, dl ;we just make sure dl is always reset before we exit, just incase we forget anywhere
+            mov eax, set_timer - error_invalid_chan -1
+            call [vga_tty]
             ret
 
-error_invalid_chan db "The channel you gave was invalid, please try again with a valid channel",0
-set_timer db "The timer has been set!",0
+error_invalid_chan db "The channel you gave was invalid, please try again with a valid channel"
+set_timer db "The timer has been set!"
+text_end db 0x00
 usage dd 0x00
-    ;vga driver
-            init        equ 0b00000001
-            loop_func   equ 0b00000010
-            res_scr     equ 0b00000100
-            clr_scr     equ 0b00001000
-            N_line      equ 0b00010000
-            print_char  equ 0b00100000
-            print       equ 0x10c800
+vga_tty dd 0x00
 times 512 - ($ - $$) db 0

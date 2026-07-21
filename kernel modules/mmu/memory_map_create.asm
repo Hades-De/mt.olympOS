@@ -1,6 +1,12 @@
 [bits 32]
-
-[org 0x10cA00]
+[org 0x10ce00]
+pop ebx
+mov eax, 0xfff7fc00
+neg eax
+mov dword [0x500], eax
+pop eax
+mov dword [bitmap], eax
+push ebx
 xor edi, edi
 load_map:
     mov esi, [map_start + edi + 16] ; edi is the offset
@@ -17,7 +23,7 @@ load_map:
     mov edx, [map_start + edi + 12] ; mov the high bytes of the length into edx
     ret
 
-.save_usable:
+.save_usable: ;usable map overrides the VGA memory, prolly in the .loop
     call .load_regs
     push edi
     mov edi, [storage_save]
@@ -25,12 +31,40 @@ load_map:
     mov [usable_ram + edi + 4], ebx ;save the high adress into that plus 4 bytes
     mov [usable_ram + edi + 8], ecx ;save the low bytes of the length into the location +8
     mov [usable_ram + edi + 12], edx ;save the high bytes of the length at last ; we can inc by 16, because this *is* the list for usable ram, so we dont need a flag for itd
-    mov eax, [0x500]      ; load current low total
-    mov ebx, [0x504]      ; load current high total
-    add eax, ecx          ; add low part
-    adc ebx, edx          ; add high part + carry from low
-    mov [0x500], eax      ; store back low
-    mov [0x504], ebx      ; store back high
+    push edi
+    .test_space: ; it should check if the current area is possibly outside out memory map
+        clc
+        adc dword [0x500], ecx
+        jnc .skip_carry
+        add dword [0x504], 1
+        clc
+        .skip_carry:
+            mov esi, ecx
+            add esi, eax
+            shr esi, 12
+            shr eax, 12
+            cmp eax, 4096
+            jge .skip
+    xor ebx, ebx
+    xor ecx, ecx
+    xor edx, edx
+    mov edi, [bitmap]
+    .loop:
+        mov ebx, eax
+        mov ecx, ebx
+        shr ebx, 3          ; byte index
+        and ecx, 7          ; bit index
+        mov dl, 1
+        shl dl, cl
+        not dl
+        and [edi + ebx], dl
+        inc eax
+        cmp eax, 4096
+        jg .skip
+        cmp eax, esi ;add safetyrails
+        jle .loop
+    .skip:
+    pop edi
     add edi, 16
     mov [storage_save], edi
     pop edi
@@ -38,11 +72,11 @@ load_map:
     jmp load_map
 
 .reserverd:
+    call .load_regs
     cmp esi, 4
     jge ignore
     cmp esi, 2
     jne ignore
-    call .load_regs
     push edi 
     mov edi, [reserved_save]
     mov [reserved_ram + edi], eax ; move eax into 0x5000 + offeset + the byte 
@@ -65,6 +99,8 @@ ignore:
 .done:
     ret
 
+bitmap dd 0x00
+hex_bin dd 0x00
 empty_flag db 0
 storage_save dd 0
 reserved_save dd 0 

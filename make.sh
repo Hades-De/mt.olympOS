@@ -7,14 +7,16 @@ mv *.bin ../../
 echo moved the files, moving onto the kernel modules and kernel
 cd ..
 cd "kernel modules"
-nasm -f bin command_parsing.asm -o parser.bin
 nasm -f bin irqtimer.asm -o timer.bin
-nasm -f bin KEYBOARD_driver.asm -o keyboard.bin
-nasm -f bin MemHandler_assigner.asm -o memhandler.bin
-nasm -f bin memory_map_create.asm -o mem.bin
-nasm -f bin VGA_driver.asm -o VGA.bin
-nasm -f bin PID_generator.asm -o PID.bin
 nasm -f bin Lib.asm -o library.bin
+cd "mmu"
+nasm -f bin mem_interface.asm -o memIO.bin
+nasm -f bin memory_map_create.asm -o mem.bin
+nasm -f bin heap.asm -o mm.bin
+nasm -f bin PFA.asm -o Phys.bin
+nasm -f bin paging.asm -o page.bin
+mv *.bin ../../../
+cd ..
 mv *.bin ../../
 cd ..
 echo kernel modules done and moved

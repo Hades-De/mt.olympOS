@@ -12,19 +12,42 @@ cli
         mov esp, 0x7c000
         xor di, di
         xor ax, ax
-        mov esi, 0xB8000
-        mov dl, init
-        call print
-        mov dl, clr_scr
-        call print
+    lib_init:
+        call 0x10c800
+        pop ecx
+        pop ebx
+        pop eax
+        pop edx
+        pop esi
+        mov dword [print_tty], ecx
+        mov dword [setup_xy], ebx
+        mov dword [print_xy], eax
+        mov dword [bin_hex], edx
+        mov dword [newLine] , esi
+        xor ecx, ecx
+        xor edx, edx
+        call [setup_xy]
         mov ebx, Gdt_init
-        mov ah, 0x0f
-        mov dl, print_char | loop_func
-        call print
-        call init_ok
-        mov dl, N_line
-        call print
-        jmp idt_int_setup
+        mov eax, ram_detect - Gdt_init -1
+        call [print_tty]
+        call [newLine]
+    memory_init:
+        call 0x10c400
+        pop ecx
+        pop eax
+        pop ebx
+        mov dword [dump_mem], eax
+        mov dword [page_walk], ebx
+        mov dword [Valloc], ecx
+        mov eax, [0x504]
+        call [bin_hex]
+        mov eax, [0x500]
+        call [bin_hex]
+        mov ebx, ram_detect
+        mov eax, offset_page - ram_detect -1
+        call [print_tty]
+        call [newLine]   
+        jmp idt_int_setup 
 
 ;======INTERRUPT TABLE ENTRIES + PIC SETUP======
     idt_int_setup:
@@ -122,357 +145,307 @@ cli
             ;mov eax, Disk_ATA_Handler
             ;call make_idt_entry
 
-            mov al, 0b11111110
+            mov al, 0b11111111
             out 0x21, al
             mov al, 0b10111111 
             out 0xA1, al
 
 ;======KERNEL======  
-    mov edi, init
-    call 0x10D600
-    jmp $
-    call 0x10ca00
-    call Convert_to_dec
-    mov ah, 0x0f
-    mov dl, print_char | loop_func
-    call print
-    mov ebx, RAM
-    mov ah, 0x0f
-    mov dl, print_char | loop_func
-    call print
-    mov dl, N_line
-    call print
-    mov ah, 0x0f
-    mov dl, print_char | loop_func
-    call print
     xor edi, edi
-    mov dl, 0b00000001
-    call mmu
-    mov ecx, 14 ; last page being used rn, left 512bytes
-    call mmu
     mov ebx, 0x349B2E
-    mov dl, 0b00000001
-    call 0x10d000 
-    mov dl, N_line
-    call print
-    xor ebx, ebx
-    mov cx, prio_1
-    mov bx, prio_3
-    shl ebx, 16
-    mov bx, prio_2
-    mov dl, init
-    call PID_gen
-    mov ecx, 1
-    call mmu
-    ;mov ecx, [0x550]
-    mov dword [0x510], 1
+    mov eax, [print_tty]
+    call irq_timer
+    call [newLine]
     lidt [idt_ptr]
     sti
     init_list:
-        int 0x01 ; test IDT
+        mov eax, 0x500000
+        call Dump_Pagewalk
+        call [newLine]
+        mov ebx, 0x500000
+        mov eax, 4
+        call [Valloc]
+        mov ebx, 0x505000
+        mov eax, 4
+        call [Valloc]
+        mov dword [0x500000], 0x12345678
+        mov eax, [0x500000]
+        call [bin_hex]
+        mov dword [0x505000], 0x87654321
+        mov eax, [0x505000]
+        call [bin_hex]
     Kernel_loop:
         jmp Kernel_loop
 ;0010ce5c
 
-Convert_to_dec:
-        mov eax, [0x500]
-        mov ecx, 10        ; divisor
-        xor edx, edx       ; clear remainder
-        mov ebx, buf+10    ; end of buffer
-        mov byte [ebx], 0  ; null-terminate the string
-        dec ebx            ; move back to fill digits
+Dump_regs:
+        call [newLine]
+        pop ebp
+        mov ebx, reg_edi
+        mov eax, reg_esi - reg_edi -1
+        call [print_tty]
+        pop eax
+        call [bin_hex]
+        mov ebx, reg_esi
+        mov eax, reg_ebp - reg_esi -1
+        call [print_tty]
+        pop eax
+        call [bin_hex]
+        mov ebx, reg_ebp
+        mov eax, reg_esp - reg_ebp -1
+        call [print_tty]
+        pop eax
+        call [bin_hex]
+        call [newLine]
+        mov ebx, reg_esp
+        mov eax, reg_ebx - reg_esp -1
+        call [print_tty]
+        pop eax
+        call [bin_hex]
+        mov ebx, reg_ebx
+        mov eax, reg_edx - reg_ebx -1
+        call [print_tty]
+        pop eax
+        call [bin_hex]
+        mov ebx, reg_edx
+        mov eax, reg_ecx - reg_edx -1
+        call [print_tty]
+        pop eax
+        call [bin_hex]
+        call [newLine]
+        mov ebx, reg_ecx
+        mov eax, reg_eax - reg_ecx -1
+        call [print_tty]
+        pop eax
+        call [bin_hex]
+        mov ebx, reg_eax
+        mov eax, cr_cr0 - reg_eax -1
+        call [print_tty]
+        pop eax
+        call [bin_hex]
+        push ebp
+        ;now cr0-2-3-4
+        call [newLine]
+        mov ebx, cr_cr0
+        mov eax, cr_cr2 - cr_cr0 -1
+        call [print_tty]
+        mov eax, cr0
+        call [bin_hex]
+        mov ebx, cr_cr2
+        mov eax, cr_cr3 - cr_cr2 -1
+        call [print_tty]
+        mov eax, cr2
+        call [bin_hex]
+        mov ebx, cr_cr3
+        mov eax, cr_cr4 - cr_cr3 -1
+        call [print_tty]
+        mov eax, cr3
+        call [bin_hex]
+        mov ebx, cr_cr4
+        mov eax, Gdt_init - cr_cr4 -1
+        call [print_tty]
+        mov eax, cr4
+        call [bin_hex]
+        call [newLine]
+        ret
 
-        .convert_loop:
-                xor edx, edx
-                div ecx            ; divide eax by 10, quotient in eax, remainder in edx
-                add dl, '0'        ; convert remainder to ASCII
-                mov [ebx], dl
-                dec ebx
-                test eax, eax
-                jnz .convert_loop
+Dump_Pagewalk:; expects eax to hold the Vmem loc
+        call [page_walk]
+        pop eax
+        call [bin_hex]
+        mov ebx, pde
+        mov eax, space - pde -1
+        call [print_tty]
+        pop eax
+        call [bin_hex]
+        mov ebx, pte
+        mov eax, pde - pte -1
+        call [print_tty]
+        pop eax
+        call [bin_hex]
+        mov ebx, offset_page
+        mov eax, pte - offset_page -1
+        call [print_tty]
+        ret
 
-                inc ebx            ; ebx now points to the first character of the string
-                mov [0x540], ebx
-                ret
-
+Dump_mem_loc:
+        call [dump_mem]
+        xor ecx, ecx
+        .loop:
+            pop eax
+            push ecx
+            call [bin_hex]
+            mov ebx, space
+            mov eax, Idt_init - space -1
+            call [print_tty]
+            pop ecx
+            inc ecx
+            cmp ecx, 32
+            jl .loop
+            ret
 ;======IDT FAULT INTERRUPTS======
     exec_idt:
         Div_zero:
             pusha
-            mov ah, 0x04
-            mov ebx, zero
-            mov dl, print_char | loop_func
-            call print
-            popa
+            mov ebx, Div_zero
+            mov eax, debug - Div_zero -1
+            call [print_tty]
+            call Dump_regs
             cli
             hlt
             jmp $
 
         Debug:
             pusha
-            mov ebx, Idt_init
-            mov ah, 0x0f
-            mov dl, print_char | loop_func
-            call print
-            call init_ok
-            mov dl, N_line
-            call print
-            popa
+            mov ebx, debug
+            mov eax, nmi - debug -1
+            call [print_tty]
+            call Dump_regs
+            cli
             iret
 
         Non_mask_int:
             pusha
-            mov ah, 0x04
             mov ebx, nmi
-            mov dl, print_char | loop_func
-            call print
-            popa
+            mov eax, breakp - nmi -1
+            call [print_tty]
+            call Dump_regs
             cli
             hlt
             jmp $
             
         Break:
             pusha
-            mov ah, 0x04
             mov ebx, breakp
-            mov dl, print_char | loop_func
-            call print
-            popa
+            mov eax,  overf - breakp -1
+            call [print_tty]
+            call Dump_regs
             cli
             hlt
             jmp $
             
         Overflow:
             pusha
-            mov ah, 0x04
             mov ebx, overf
-            mov dl, print_char | loop_func
-            call print
-            popa
+            mov eax, bre - overf -1
+            call [print_tty]
+            call Dump_regs
             cli
             hlt
             jmp $
             
         Bound_range_Exceeded:
             pusha
-            mov ah, 0x04
             mov ebx, bre
-            mov dl, print_char | loop_func
-            call print
-            popa
+            mov eax, inop - bre -1
+            call [print_tty]
+            call Dump_regs
             cli
             hlt
             jmp $
             
         Invalid_opcode:
             pusha
-            mov ah, 0x04
             mov ebx, inop
-            mov dl, print_char | loop_func
-            call print
-            popa
+            mov eax, dna - inop -1
+            call [print_tty]
+            call Dump_regs
             cli
             hlt
             jmp $
             
         Device_not_available:
             pusha
-            mov ah, 0x04
             mov ebx, dna
-            mov dl, print_char | loop_func
-            call print
-            popa
+            mov eax, df - dna -1
+            call [print_tty]
+            call Dump_regs
             cli
             hlt
             jmp $
             
         Double_fault:
             pusha
-            mov ah, 0x04
             mov ebx, df
-            mov dl, print_char | loop_func
-            call print
-            popa
+            mov eax, cso - df -1
+            call [print_tty]
+            call Dump_regs
             cli
             hlt
             jmp $
             
         Coproc_overrrun:
             pusha
-            mov ah, 0x04
             mov ebx, cso
-            mov dl, print_char | loop_func
-            call print
-            popa
+            mov eax, intts - cso -1
+            call [print_tty]
+            call Dump_regs
             cli
             hlt
             jmp $
             
         Invalid_TTS:
             pusha
-            mov ah, 0x04
             mov ebx, intts
-            mov dl, print_char | loop_func
-            call print
-            popa
+            mov eax, snp - intts -1
+            call [print_tty]
+            call Dump_regs
             cli
             hlt
             jmp $
             
         Seg_not_pres:
             pusha
-            mov ah, 0x04
             mov ebx, snp
-            mov dl, print_char | loop_func
-            call print
-            popa
+            mov eax, ssf - snp -1
+            call [print_tty]
+            call Dump_regs
             cli
             hlt
             jmp $
             
         Stack_seg_fault:
             pusha
-            mov ah, 0x04
             mov ebx, ssf
-            mov dl, print_char | loop_func
-            call print
-            popa
+            mov eax, gpf - ssf -1
+            call [print_tty]
+            call Dump_regs
             cli
             hlt
             jmp $
             
         Gen_prot_fault:
             pusha
-            mov ah, 0x04
             mov ebx, gpf
-            mov dl, print_char | loop_func
-            call print
-            popa
+            mov eax, pf - gpf -1
+            call [print_tty]
+            call Dump_regs
             cli
             hlt
             jmp $
             
         Page_fault:
             pusha
-            mov ah, 0x04
             mov ebx, pf
-            mov dl, print_char | loop_func
-            call print
-            popa
+            mov eax, reg_edi - pf -1
+            call [print_tty]
+            mov eax, [esp+32] ; page fault error code
+            call [bin_hex]
+            call Dump_regs
             cli
             hlt
             jmp $
 
 ;======KEYBOARD, TIMER, DISK HANDLERS======
-timer:
-    .loop:
-        inc byte [0x520]
-        cmp byte [0x520], 22
-        jge .continue
-        jmp .skip
-    .continue:
-        mov byte [0x520], 0
-        cmp byte [0x522], white
-        jge .reset_color
-        inc byte [0x522]
-        jmp .continuee
-        .reset_color:
-            mov byte [0x522], 0x01
-        .continuee:
-            mov ebx, Timer_msg
-            mov ah, [0x522]
-            mov dl, print_char | loop_func
-            call print
-    .skip:
-        mov al, 0x20
-        out 0x20, al
+    timer:
+        mov ebx, Timer_msg
+        mov eax, text_end - Timer_msg -1
+        call [print_tty]
         iret
-
-;init indicators
-    init_ok:
-        mov ah, 0x0f ; white
-        mov dl, print_char
-        call print
-        mov al, '['
-        mov dl, print_char
-        call print
-        xor ax, ax
-        mov ah, 0x02 ; green
-        mov ebx, ok
-        mov dl, print_char | loop_func
-        call print
-        mov ah, 0x0f ; white
-        mov al, ']'
-        mov dl, print_char
-        call print
-        ret
-
-    init_failed:
-        mov ah, 0x0f ; white
-        mov dl, print_char
-        call print
-        mov al, '['
-        mov dl, print_char
-        call print
-        xor ax, ax
-        mov ah, 0x04 ; red
-        mov ebx, failed
-        mov dl, print_char | loop_func
-        call print
-        mov ah, 0x0f ; white
-        mov al, ']'
-        mov dl, print_char
-        call print
-        ret
-
-        Print_Character: ;expects esi to be set, color in ah, letter byte in al, and edi to have [vid_counter]. increases [vid_counter], [buffer_ptr],
-        cmp al, 0x20
-        jne .print
-        mov ah, 0x00
-        mov al, 0x00
-        .print:
-            mov word [esi], ax
-            add esi, 2
-            cmp esi, vidmemend
-            jae .reset_cursor
-            .update_print_ptr:
-                inc edi
-                cmp edi, 80
-                je .reset_vid_counter
-            .return:
-                mov [buffer_ptr], esi
-                mov [vid_counter], edi
-                ret
-
-            .reset_cursor:
-                    mov esi, 0xB8000
-                    mov [buffer_ptr], esi
-                    jmp .update_print_ptr
-
-            .reset_vid_counter:
-                mov edi, 0
-                jmp .return
-
-    print_timer: ;EXPECTS EBX TO HAVE STRING, AND COLOR BYTE TO BE SET!!! in ah
-        mov [color_attr_buffer], ah
-        mov edi, [vid_counter]
-        .print_loop:
-            mov ah, [color_attr_buffer] ; just so, if we had a space in the single char print, it sets it back to what it was
-            mov al, [ebx]
-            test al, al
-            je .return
-            call Print_Character
-            inc ebx
-            jmp .print_loop
-
-        .return:
-                mov [buffer_ptr], esi
-                mov [vid_counter], edi
-                ret
 
 ; eax = handler address
 ; edi = index
-make_idt_entry:
+    make_idt_entry:
     ; Set low 16 bits of handler
     mov word [idt + edi*8 + 0], ax              
     ; Set segment selector (e.g. 0x08 for kernel code)
@@ -486,11 +459,11 @@ make_idt_entry:
     mov word [idt + edi*8 + 6], ax              
     ret
 
-idt:
+    idt:
     times 256 dq 0
-idt_ptr:
-    dw 256 * 8 - 1
-    dd idt
+    idt_ptr:
+        dw 256 * 8 - 1
+        dd idt
 
 ;======VARIABLES, ERROR STRINGS, KEYBOARD MAP======
     zero db '[E]0x00 Div by 0 error!'
@@ -508,62 +481,56 @@ idt_ptr:
     ssf db '[E]0x0C stack-segment fault'
     gpf db '[E]0x0D general protection fault'
     pf db '[E]0x0E Page fault, mem acc fail'
-    noCom db 'no command found!'
-    noFil db 'no File found!'
-    no_space db 'no space left!'
-    Gdt_init db 'GDT Init',0
-    Idt_init db 'IDT Init',0
-    failed db 'FAILED'
-    ok db 'OK',0
-    RAM db ' Bytes of ram detected!'
+    reg_edi db ' edi '
+    reg_esi db ' esi '
+    reg_ebp db ' ebp '
+    reg_esp db ' esp '
+    reg_ebx db ' ebx '
+    reg_edx db ' edx '
+    reg_ecx db ' ecx '
+    reg_eax db ' eax '
+    cr_cr0  db ' cr0 '
+    cr_cr2  db ' cr2 '
+    cr_cr3  db ' cr3 '
+    cr_cr4  db ' cr4 '
+    Gdt_init db '[OK] GDT Init'
+    ram_detect db ` bytes of ram detected`
+    offset_page db ` offset `
+    pte db ` Page Table `
+    pde db ` Page Directory `
+    space db ` `
+    Idt_init db '[OK] IDT Init'
     Timer_msg db "time tick "
     text_end db 0x00
-    buf dw 0x00
-    timer_counter dd 0
-    testt dw 0x00
-    ah_test db 0x00
-    al_test db 0x00
-    ;RRtable
-        length_string: db 0x00
-        length_string_end db 0x00
-        prio_1: ;kernel important stuff, Interrupts etc etc
-            times (128) db 0
-        prio_2: ; kernel side offers, like user IO
-            times (256) db 0
-        prio_3: ; userland 
-            times (512) db 0
+
+    ;mmu
+            Valloc dd 0x00
+    ;debug
+            page_walk dd 0x00
+            dump_mem dd 0x00
     ;vga driver
-            init        equ 0b00000001
-            loop_func   equ 0b00000010
-            res_scr     equ 0b00000100
-            clr_scr     equ 0b00001000
-            N_line      equ 0b00010000
-            print_char  equ 0b00100000
-            print       equ 0x10c800
-            PID_gen     equ 0x10d200
-            mmu         equ 0x10cc00
+            irq_timer equ 0x10Cc00 
+            print_xy dd 0x00
+            print_tty dd 0x00
+            setup_xy dd 0x00
+            bin_hex dd 0x00
+            newLine dd 0x00
 
-        ;colors
-            black    equ 0x00
-            blue     equ 0x01
-            green    equ 0x02
-            cyan     equ 0x03
-            red      equ 0x04
-            purple   equ 0x05
-            brown    equ 0x06
-            gray     equ 0x07
-            D_gray   equ 0x08
-            L_blue   equ 0x09
-            L_green  equ 0x0a
-            L_cyan   equ 0x0b
-            L_red    equ 0x0c
-            L_purple equ 0x0d
-            yellow   equ 0x0e
-            white    equ 0x0f
-
-    read_loc dd 0
-    buffer_ptr dd 0xB8F00
-    vidmemend equ 0xB8F9E
-    vid_counter dd -1
-    color_attr_buffer db 0
-times 51200 - ($ - $$) db 0xff
+    ;colors
+        black    equ 0x00
+        blue     equ 0x01
+        green    equ 0x02
+        cyan     equ 0x03
+        red      equ 0x04
+        purple   equ 0x05
+        brown    equ 0x06
+        gray     equ 0x07
+        D_gray   equ 0x08
+        L_blue   equ 0x09
+        L_green  equ 0x0a
+        L_cyan   equ 0x0b
+        L_red    equ 0x0c
+        L_purple equ 0x0d
+        yellow   equ 0x0e
+        white    equ 0x0f
+times 50176 - ($ - $$) db 0xee

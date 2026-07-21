@@ -155,27 +155,8 @@
         call ready_check
         jmp $+2
         mov dword [LBA_address], 0x6f
-        mov dword [buffer_disk], 0x10C800
-        mov dword [sector], 1
-        jmp $+2
-        call load_LBA
-        jmp $+2
-        jmp $+2
-        .loop:
-            call ready_check
-            cmp byte [disk_able], 0
-            je .loop
-            cmp byte [sector], 0
-            je load_keyboard_driver
-            jmp .loop
-
-        load_keyboard_driver:
-        jmp $+2
-        call ready_check
-        jmp $+2
-        mov dword [LBA_address], 0x70
-        mov dword [buffer_disk], 0x10Ca00 ;0x10ca00-0x10d900 
-        mov dword [sector], 7
+        mov dword [buffer_disk], 0x10C800 ;- 0x10ed00
+        mov dword [sector], 20
         jmp $+2
         call load_LBA
         jmp $+2

@@ -32,3 +32,20 @@ GNU Make / shell
 Disclaimer
 
 This is a personal educational project. It is not intended for stability, security, or production use.
+    .repeat_check:
+        push ebx
+        push edx
+        call .check_loc_vmem
+        pop edx
+        dec edx
+        cmp edx, 0
+        je give_clear
+        pop ebx
+        add ebx, 4096
+        jmp .repeat_check
+
+        .calculate_pages:
+        shl eax, 10
+        add eax, 4095
+        shr eax, 12
+        mov edx, eax
