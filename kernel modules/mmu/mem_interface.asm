@@ -92,6 +92,17 @@ Valloc:
         shr eax, 12
         mov edx, eax  
     ;eax now holds the amount of pages
+    ;.repeat_check:
+    ;    push ebx
+    ;    push edx
+    ;    call .check_loc_vmem
+     ;   pop edx
+     ;   dec edx
+     ;   cmp edx, 0
+      ;  je give_clear
+      ;  pop ebx
+    ;    add ebx, 4096
+     ;   jmp .repeat_check
 
     .check_loc_vmem:
         mov eax, ebx
