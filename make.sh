@@ -12,10 +12,16 @@ nasm -f bin Lib.asm -o library.bin
 cd "mmu"
 nasm -f bin mem_interface.asm -o memIO.bin
 nasm -f bin memory_map_create.asm -o mem.bin
-nasm -f bin heap.asm -o mm.bin
 nasm -f bin PFA.asm -o Phys.bin
 nasm -f bin paging.asm -o page.bin
+nasm -f bin heap.asm -o heap.bin
 mv *.bin ../../../
+cd ..
+cd "drivers"
+cd "HDD"
+nasm -f bin ATA.asm -o ataHW.bin
+mv *.bin ../../../../
+cd ..
 cd ..
 mv *.bin ../../
 cd ..

@@ -3,25 +3,28 @@
 jmp init_lib
 
 init_lib: ;returns all the locations on the stack
-    pop edx
+    mov eax, esp ;temp save the current stack to eax
+    mov esp, ebp ; get the var stack to the pos
+    mov ebp, eax ;save the 'old' stack to ebp
     mov eax, prnt_str
     mov ebx, setup_xy
     mov ecx, print_tty
-    mov esi, binary_hex
-    mov edi, new_line
-    push edi
-    push esi
-    push eax
-    push ebx
-    push ecx
-    push edx
+    mov edx, binary_hex
+    mov esi, new_line
+    pusha
+    mov eax, esp
+    mov esp, ebp
+    mov ebp, eax
     ret
 
 setup_xy: ; ecx holds the buffer loc, edx vga mode 1=non 80x25 mode, low eax holds xpos, high eax holds ypos. ebx holds col bit info
-    mov dword [vga_buffer], 0xb8000
+    mov eax, [esp+4]
+    mov ebx, [esp+8]
+    mov ecx, [esp+12]
+    mov edx, [esp+16]
+    mov dword [vga_buffer], ecx
     mov dword [tty_offset], 160
-    xor edx, edx
-    cmp edx, 0
+    cmp dx, 0
     je .setup_default ;sets the default 80*25 mode
     mov [Xmax], ax 
     shr eax, 16

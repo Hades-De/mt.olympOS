@@ -14,33 +14,34 @@ init: ;pushes in order: alloc, bitmap, unalloc
 
 find_free_bloc:; malloc 1 page, returns the page in eax
     mov edi, bitmap
-    xor ebx, ebx          
+    xor ebx, ebx
 
-    .find_byte:
-        mov al, [edi + ebx]
-        cmp al, 0xFF
-        jne .found_partial
-        inc ebx
-        jmp .find_byte
+.find_byte:
+    movzx eax, byte [edi + ebx]
+    cmp al, 0xFF
+    jne .found_partial
+    inc ebx
+    jmp .find_byte
 
-    .found_partial:
-        xor ecx, ecx    
+.found_partial:
+    xor ecx, ecx
 
-    .find_bit:
-        bt ax, cx       
-        jnc .free_bit  
-        inc ecx
-        cmp ecx, 8
-        jl .find_bit
+.find_bit:
+    bt eax, ecx
+    jnc .free_bit
+    inc ecx
+    cmp ecx, 8
+    jl .find_bit
 
-    .free_bit:
-        bts ax, cx
-        mov [edi + ebx], al
-        mov eax, ebx
-        shl eax, 3       
-        add eax, ecx     
-        shl eax, 12
-        ret
+.free_bit:
+    bts eax, ecx
+    mov byte [edi + ebx], al
+
+    mov eax, ebx
+    shl eax, 3
+    add eax, ecx
+    shl eax, 12
+    ret
 
 free_block:; marks the page in eax as empty
     shr eax, 12
@@ -53,7 +54,7 @@ free_block:; marks the page in eax as empty
     mov dl, 1
     shl dl, cl
     not dl
-    and [edi + ebx], dl
+    and byte [edi + ebx], dl
     ret
 
 

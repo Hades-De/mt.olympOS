@@ -10,35 +10,53 @@ cli
         mov gs, ax
         mov ss, ax
         mov esp, 0x7c000
+        mov ebp, esp
+        sub ebp, 0x200;for init's
         xor di, di
         xor ax, ax
     lib_init:
         call 0x10c800
-        pop ecx
-        pop ebx
-        pop eax
-        pop edx
-        pop esi
+        mov eax, esp
+        mov esp, ebp
+        mov ebp, eax
+        popa
         mov dword [print_tty], ecx
         mov dword [setup_xy], ebx
         mov dword [print_xy], eax
         mov dword [bin_hex], edx
         mov dword [newLine] , esi
-        xor ecx, ecx
-        xor edx, edx
+        mov eax, esp
+        mov esp, ebp
+        mov ebp, eax
+        mov dword [esp], 0 ;eax
+        mov dword [esp +4], 0 ;ebx
+        mov dword [esp +8], 0xb8000 ;ecx
+        mov dword [esp +12],0 ;edx
         call [setup_xy]
         mov ebx, Gdt_init
         mov eax, ram_detect - Gdt_init -1
         call [print_tty]
         call [newLine]
+    ata_init:
+        call 0x10ea00
+        pop ecx
+        pop ebx
+        pop eax
+        mov dword [write_lba_28], ecx
+        mov dword [dest], ebx
+        mov dword [read_lba_28], eax
     memory_init:
         call 0x10c400
+        pop edi
+        pop edx
         pop ecx
         pop eax
         pop ebx
         mov dword [dump_mem], eax
-        mov dword [page_walk], ebx
+        mov dword [page_calc], ebx
         mov dword [Valloc], ecx
+        mov dword [page_walk], edx
+        mov dword [Vfree], edi
         mov eax, [0x504]
         call [bin_hex]
         mov eax, [0x500]
@@ -141,39 +159,58 @@ cli
             ;mov eax, keyboard
             ;call make_idt_entry
 
-            ;mov edi, 0x2E
-            ;mov eax, Disk_ATA_Handler
-            ;call make_idt_entry
+            mov edi, 0x2E
+            mov eax, ATA_Handler
+            call make_idt_entry
 
-            mov al, 0b11111111
+            mov al, 0b11111010
             out 0x21, al
             mov al, 0b10111111 
             out 0xA1, al
 
 ;======KERNEL======  
     xor edi, edi
-    mov ebx, 0x349B2E
+    mov ebx, 0x2B2E35
     mov eax, [print_tty]
     call irq_timer
     call [newLine]
     lidt [idt_ptr]
     sti
-    init_list:
-        mov eax, 0x500000
-        call Dump_Pagewalk
+    init_list:    
+        mov ebx, 0xc0000000
+        mov eax, 4
+        call [Valloc]
+        mov eax, 0x20
+        mov ebx, 1
+        mov edi, 0xc0000000
+        mov byte [ata_flag], 2
+        call [read_lba_28]
+        .wait_ata_3:
+            cmp byte [ata_flag], 1
+            jne .wait_ata_3
+                call [newLine]
+        mov eax, 0xc0000000
+        call Dump_mem_loc
+        
+        mov eax, 0x20
+        mov ebx, 1
+        mov edi, 0x10c800
+        call [write_lba_28]
+
+        mov eax, 0x20
+        mov ebx, 1
+        mov edi, 0xc0000000
+        mov byte [ata_flag], 2
+        call [read_lba_28]
+        .wait_ata_2:
+            cmp byte [ata_flag], 1
+            jne .wait_ata_2
         call [newLine]
-        mov ebx, 0x500000
-        mov eax, 4
-        call [Valloc]
-        mov ebx, 0x505000
-        mov eax, 4
-        call [Valloc]
-        mov dword [0x500000], 0x12345678
-        mov eax, [0x500000]
-        call [bin_hex]
-        mov dword [0x505000], 0x87654321
-        mov eax, [0x505000]
-        call [bin_hex]
+        mov eax, 0xc0000000
+        call Dump_mem_loc
+        call [newLine]
+        mov eax, 0x10c800
+        call Dump_mem_loc
     Kernel_loop:
         jmp Kernel_loop
 ;0010ce5c
@@ -249,8 +286,8 @@ Dump_regs:
         call [newLine]
         ret
 
-Dump_Pagewalk:; expects eax to hold the Vmem loc
-        call [page_walk]
+Dump_page_info:; expects eax to hold the Vmem loc
+        call [page_calc]
         pop eax
         call [bin_hex]
         mov ebx, pde
@@ -283,6 +320,25 @@ Dump_mem_loc:
             cmp ecx, 32
             jl .loop
             ret
+
+Dump_mem_walk:
+        mov ebx, eax
+        call [page_walk]
+        pop eax
+        call [bin_hex]
+        mov ebx, pde
+        mov eax, space - pde -1
+        call [print_tty]
+        pop eax
+        and eax, 0xFFFFF000
+        call [bin_hex]
+        mov ebx, pte
+        mov eax, pde - pte -1
+        call [print_tty]
+        pop eax
+        and eax, 0xFFFFF000
+        call [bin_hex]
+        ret
 ;======IDT FAULT INTERRUPTS======
     exec_idt:
         Div_zero:
@@ -438,10 +494,44 @@ Dump_mem_loc:
 
 ;======KEYBOARD, TIMER, DISK HANDLERS======
     timer:
+        pusha
         mov ebx, Timer_msg
         mov eax, text_end - Timer_msg -1
         call [print_tty]
+        mov al, 0x20
+        out 0x20, al
+        popa
         iret
+
+    ATA_Handler:
+        pusha
+        cmp byte [ata_flag], 2
+        je read_ata
+        jmp return_ata
+        read_ata:
+            mov eax, [dest]
+            mov edi, [eax]
+            mov dx, 0x1f0
+            mov ecx, 256
+            .read:
+                in ax, dx
+                stosw
+                loop .read
+                jmp return_ata
+        
+        return_ata:
+            .wait_done:
+                xor ax, ax
+                mov dx, 0x1f7
+                in ax, dx
+                test ax, 0x80       ; BSY
+                jnz .wait_done
+            mov byte [ata_flag], 1
+            mov al, 0x20
+            out 0xA0, al
+            out 0x20, al
+            popa
+            iret
 
 ; eax = handler address
 ; edi = index
@@ -503,11 +593,18 @@ Dump_mem_loc:
     Timer_msg db "time tick "
     text_end db 0x00
 
+    ;ata    
+            write_lba_28 dd 0x00
+            dest dd 0x00
+            read_lba_28 dd 0x00
+            ata_flag db 0x00
     ;mmu
             Valloc dd 0x00
+            Vfree dd 0x00
     ;debug
             page_walk dd 0x00
             dump_mem dd 0x00
+            page_calc dd 0x00
     ;vga driver
             irq_timer equ 0x10Cc00 
             print_xy dd 0x00
@@ -516,21 +613,4 @@ Dump_mem_loc:
             bin_hex dd 0x00
             newLine dd 0x00
 
-    ;colors
-        black    equ 0x00
-        blue     equ 0x01
-        green    equ 0x02
-        cyan     equ 0x03
-        red      equ 0x04
-        purple   equ 0x05
-        brown    equ 0x06
-        gray     equ 0x07
-        D_gray   equ 0x08
-        L_blue   equ 0x09
-        L_green  equ 0x0a
-        L_cyan   equ 0x0b
-        L_red    equ 0x0c
-        L_purple equ 0x0d
-        yellow   equ 0x0e
-        white    equ 0x0f
-times 50176 - ($ - $$) db 0xee
+times 50120 - ($ - $$) db 0xee

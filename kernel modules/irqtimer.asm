@@ -4,7 +4,7 @@
 ;gives a timer for the priobased Round Robin scheduler
 ;1193182/desired hz = >to hex
     init:
-        mov [usage], ebx ; first 8 bits are the control we sent, next two bytes are the divisor/reload value
+        mov [usage], ebx ; first 8 bits are the control we sent, next two bytes are the divisor/reload value ebx= 0xdiv 0xdiv 0xcontrol
         mov dword [vga_tty], eax
         jmp init_timer
 

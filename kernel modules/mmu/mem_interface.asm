@@ -1,6 +1,8 @@
 [org 0x10c400]
 [bits 32]
-init_system_memory: ;0=check_mem 1= page_check
+init_system_memory:
+    mov dword [0x500], 0
+    mov dword [0x504], 0
     call paging
     pop eax
     mov dword [add_table], eax
@@ -45,28 +47,33 @@ init_system_memory: ;0=check_mem 1= page_check
             or eax, 0x80000000
             mov cr0, eax  
             pop edx
-            mov eax, Page_check
+            mov eax, Page_calculation
             mov ebx, Check_memory
             mov ecx, Valloc
+            mov edi, page_walk
+            mov esi, Vfree
             push eax
             push ebx
             push ecx
+            push edi
+            push esi
             push edx   
+            mov eax, [PFbitmap]
             ret
 
 debug_memory:
-    Page_check:
+    Page_calculation:
         pop edx
-        ;stepthru paging, expects eax to hold the Vmem addr
-        mov ebx, eax
-        shr ebx, 22 ; PDE
-        mov ecx, eax
-        shr ecx, 12
-        and ecx, 0x3ff ; PTE
-        and eax, 0xFFF; offset
-        push eax
-        push ecx
-        push ebx
+            ;stepthru paging, expects eax to hold the Vmem addr
+            mov ebx, eax
+            shr ebx, 22 ; PDE
+            mov ecx, eax
+            shr ecx, 12
+            and ecx, 0x3ff ; PTE
+            and eax, 0xFFF; offset
+            push eax
+            push ecx
+            push ebx
         push edx
         ret
         ;stack looks like 0PDE, 1PTE, 2Offset, to the kernel
@@ -84,42 +91,60 @@ debug_memory:
         push edx
         ret
 
+    page_walk:
+        ;expects ebx to hold the loc for vmem
+        pop dword [var1]
+            mov eax, ebx
+            call Page_calculation
+            pop ebx
+            mov dword [cr3_pde], ebx
+            pop ebx
+            mov dword [cr3_pte], ebx
+            pop ebx ;to make sure we have a clean stack
+            mov ebx, [cr3_pde]
+            mov esi, [cr3_val]
+            mov eax, [esi +ebx*4] ; eax now holds the pte 
+            push eax
+            and eax, 0xFFFFF000
+            mov ebx, [cr3_pte]
+            mov ecx, [eax +ebx*4] ;ecx now holds the physical page
+            mov esi, [cr3_pde]
+            pop eax
+            push ecx
+            push eax
+            push esi
+        push dword [var1]
+        ret
+
+
 Valloc:
-    ;expects the Vmem loc in ebx, and  amount of kbs in eax
+    ;expects the Vmem loc in ebx, and  amount of kbs in eax 
     .calculate_pages:
         shl eax, 10
         add eax, 4095
         shr eax, 12
         mov edx, eax  
-    ;eax now holds the amount of pages
-    ;.repeat_check:
-    ;    push ebx
-    ;    push edx
-    ;    call .check_loc_vmem
-     ;   pop edx
-     ;   dec edx
-     ;   cmp edx, 0
-      ;  je give_clear
-      ;  pop ebx
-    ;    add ebx, 4096
-     ;   jmp .repeat_check
+    ;   eax now holds the amount of pages
+    .repeat_check:
+        push ebx ; push the vmem loc
+        push edx; push amount of kb
+        call .check_loc_vmem
+        pop edx
+        pop ebx
+        dec edx
+        cmp edx, 0
+        je give_clear ;check if we reached the end
+        add ebx, 4096
+        jmp .repeat_check
 
     .check_loc_vmem:
-        mov eax, ebx
-        call Page_check
-        pop ebx
-        mov dword [cr3_pde], ebx
-        pop ebx
-        mov dword [cr3_pte], ebx
-        pop ebx ;to make sure we have a clean stack
-        mov ebx, [cr3_pde]
-        mov esi, [cr3_val]
-        mov eax, [esi +ebx*4] ; eax now holds the pte 
-        test eax, 1
+        call page_walk
+        pop esi
+        pop eax
+        pop ecx
+        test eax, 1 ;checks if the PDE is existing
         jz new_pde
         and eax, 0xFFFFF000
-        mov ebx, [cr3_pte]
-        mov ecx, [eax +ebx*4] ;ecx now holds the physical page
         and ecx, 0xff
         and ecx, 3
         cmp ecx, 3
@@ -144,15 +169,47 @@ Valloc:
         call [PFalloc]
         mov ecx, [cr3_pte]
         pop ebx
-        call [add_table]
-        mov edi, 2
+        call [add_table]    
         jmp give_clear
 
     give_clear:
         mov eax, cr3
         mov cr3, eax
         ret
+
+Vfree:
+    .calculate_pages:
+        shl eax, 10
+        add eax, 4095
+        shr eax, 12
+        mov edx, eax  
+    ;   eax now holds the amount of pages
+    .repeat_check:
+        push ebx ; push the vmem loc
+        push edx; push amount of kb
+        call .loc_remove
+        pop edx
+        pop ebx
+        dec edx
+        cmp edx, 0
+        je give_clear ;check if we reached the end
+        add ebx, 4096
+        jmp .repeat_check
     
+    .loc_remove:
+        call page_walk
+        pop esi
+        pop eax
+        and eax, 0xFFFFF000
+        mov ebx, [cr3_pte]
+        mov dword [eax+ebx*4], 0
+        pop eax
+        and eax, 0xFFFFF000
+        call [PFunalloc]
+        mov eax, cr3
+        mov cr3, eax
+        ret
+
 ;paging
     add_table dd 0x00
     cr3_pte dd 0x00
