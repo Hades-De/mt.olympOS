@@ -1,5 +1,7 @@
 [org 0x100000]
 [bits 32]
+mov byte [esi], 'K'
+mov byte [esi+1], 0x0f
 cli
 ;======SEGMENTED REGISTERS SETUP======
     seg_regs_setup:
