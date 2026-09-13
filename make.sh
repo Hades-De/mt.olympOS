@@ -9,6 +9,7 @@ cd ..
 cd "kernel modules"
 nasm -f bin irqtimer.asm -o timer.bin
 nasm -f bin Lib.asm -o library.bin
+nasm -f bin command_int.asm -o cmd_int.bin
 cd "mmu"
 nasm -f bin mem_interface.asm -o memIO.bin
 nasm -f bin memory_map_create.asm -o mem.bin
@@ -20,6 +21,10 @@ cd ..
 cd "drivers"
 cd "HDD"
 nasm -f bin ATA.asm -o ataHW.bin
+mv *.bin ../../../../
+cd ..
+cd "keyboard"
+nasm -f bin hardware.asm -o keyHW.bin
 mv *.bin ../../../../
 cd ..
 cd ..

@@ -1,0 +1,5 @@
+The following is required to make a file bootable
+[loc] = 0xFEEFDFFD
+[loc+4] = expected loc in mem (vmem)
+[loc+8] =amt pages
+[loc+12] = start code loc

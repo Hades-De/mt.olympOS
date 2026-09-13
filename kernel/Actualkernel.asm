@@ -1,7 +1,5 @@
 [org 0x100000]
 [bits 32]
-mov byte [esi], 'K'
-mov byte [esi+1], 0x0f
 cli
 ;======SEGMENTED REGISTERS SETUP======
     seg_regs_setup:
@@ -21,12 +19,15 @@ cli
         mov eax, esp
         mov esp, ebp
         mov ebp, eax
+        pop eax
+        mov dword [clear_screen], eax
         popa
         mov dword [print_tty], ecx
         mov dword [setup_xy], ebx
         mov dword [print_xy], eax
         mov dword [bin_hex], edx
         mov dword [newLine] , esi
+        mov dword [backspace], edi
         mov eax, esp
         mov esp, ebp
         mov ebp, eax
@@ -66,7 +67,32 @@ cli
         mov ebx, ram_detect
         mov eax, offset_page - ram_detect -1
         call [print_tty]
-        call [newLine]   
+        call [newLine]
+    keyboard_init:
+        mov ebx, 0x200000
+        mov eax, 1
+        call [Valloc]
+        call 0x10ec00
+        pop eax 
+        pop ebx
+        pop ecx
+        mov dword [scancode], ecx
+        mov dword [read_keyboard], eax
+        mov dword [kb_offset], ebx
+    cmd_init:
+        mov eax, command_buffer
+        mov ebx, esi_CB_stor
+        mov edx, Dump_regs
+        mov edi, kprint
+        mov esi, knewline
+        push esi
+        push edi
+        push edx
+        push ebx
+        push eax
+        call 0x10ee00
+        pop eax
+        mov dword [cmd_handler], eax
         jmp idt_int_setup 
 
 ;======INTERRUPT TABLE ENTRIES + PIC SETUP======
@@ -157,190 +183,112 @@ cli
             mov eax, timer
             call make_idt_entry
 
-            ;mov edi, 0x21
-            ;mov eax, keyboard
-            ;call make_idt_entry
+            mov edi, 0x21
+            mov eax, keyboard
+            call make_idt_entry
 
             mov edi, 0x2E
             mov eax, ATA_Handler
             call make_idt_entry
 
-            mov al, 0b11111010
+            mov al, 0b11111000
             out 0x21, al
             mov al, 0b10111111 
             out 0xA1, al
 
 ;======KERNEL======  
     xor edi, edi
-    mov ebx, 0x2B2E35
+    mov ebx, 0xffff35 ;2B2E
     mov eax, [print_tty]
     call irq_timer
-    call [newLine]
     lidt [idt_ptr]
     sti
-    init_list:    
-        mov ebx, 0xc0000000
-        mov eax, 4
-        call [Valloc]
-        mov eax, 0x20
-        mov ebx, 1
-        mov edi, 0xc0000000
-        mov byte [ata_flag], 2
-        call [read_lba_28]
-        .wait_ata_3:
-            cmp byte [ata_flag], 1
-            jne .wait_ata_3
-                call [newLine]
-        mov eax, 0xc0000000
-        call Dump_mem_loc
-        
-        mov eax, 0x20
-        mov ebx, 1
-        mov edi, 0x10c800
-        call [write_lba_28]
-
-        mov eax, 0x20
-        mov ebx, 1
-        mov edi, 0xc0000000
-        mov byte [ata_flag], 2
-        call [read_lba_28]
-        .wait_ata_2:
-            cmp byte [ata_flag], 1
-            jne .wait_ata_2
+    init_list: 
+        mov ebx, 'NoMM'
+        mov dword [debug_exit_code_var], ebx
+        mov ebx, '0x10'
+        mov dword [debug_source_var], ebx
+        call debug_function
         call [newLine]
-        mov eax, 0xc0000000
-        call Dump_mem_loc
-        call [newLine]
-        mov eax, 0x10c800
-        call Dump_mem_loc
+        ;int 0x01
     Kernel_loop:
+        cmp byte [enter_press], 1
+        je .handle_enter
+        jmp Kernel_loop
+            .handle_enter:
+                cmp dword [esi_CB_stor], 0
+                je return_reset_enter
+                call [cmd_handler]
+            return_reset_enter:
+                mov byte [enter_press], 0
+                mov edx, [kb_offset]
+                mov dword [edx], 0
         jmp Kernel_loop
 ;0010ce5c
 
-Dump_regs:
-        call [newLine]
-        pop ebp
-        mov ebx, reg_edi
-        mov eax, reg_esi - reg_edi -1
-        call [print_tty]
-        pop eax
-        call [bin_hex]
-        mov ebx, reg_esi
-        mov eax, reg_ebp - reg_esi -1
-        call [print_tty]
-        pop eax
-        call [bin_hex]
-        mov ebx, reg_ebp
-        mov eax, reg_esp - reg_ebp -1
-        call [print_tty]
-        pop eax
-        call [bin_hex]
-        call [newLine]
-        mov ebx, reg_esp
-        mov eax, reg_ebx - reg_esp -1
-        call [print_tty]
-        pop eax
-        call [bin_hex]
-        mov ebx, reg_ebx
-        mov eax, reg_edx - reg_ebx -1
-        call [print_tty]
-        pop eax
-        call [bin_hex]
-        mov ebx, reg_edx
-        mov eax, reg_ecx - reg_edx -1
-        call [print_tty]
-        pop eax
-        call [bin_hex]
-        call [newLine]
-        mov ebx, reg_ecx
-        mov eax, reg_eax - reg_ecx -1
-        call [print_tty]
-        pop eax
-        call [bin_hex]
-        mov ebx, reg_eax
-        mov eax, cr_cr0 - reg_eax -1
-        call [print_tty]
-        pop eax
-        call [bin_hex]
-        push ebp
-        ;now cr0-2-3-4
-        call [newLine]
-        mov ebx, cr_cr0
-        mov eax, cr_cr2 - cr_cr0 -1
-        call [print_tty]
-        mov eax, cr0
-        call [bin_hex]
-        mov ebx, cr_cr2
-        mov eax, cr_cr3 - cr_cr2 -1
-        call [print_tty]
-        mov eax, cr2
-        call [bin_hex]
-        mov ebx, cr_cr3
-        mov eax, cr_cr4 - cr_cr3 -1
-        call [print_tty]
-        mov eax, cr3
-        call [bin_hex]
-        mov ebx, cr_cr4
-        mov eax, Gdt_init - cr_cr4 -1
-        call [print_tty]
-        mov eax, cr4
-        call [bin_hex]
-        call [newLine]
-        ret
+kprint:; first thing on the stack is the str_length,second is pointer to the string
+    pop ebp
+    pop eax
+    pop ebx
+    call [print_tty]
+    call [newLine]
+    push ebp
+    ret
 
-Dump_page_info:; expects eax to hold the Vmem loc
-        call [page_calc]
-        pop eax
-        call [bin_hex]
-        mov ebx, pde
-        mov eax, space - pde -1
-        call [print_tty]
-        pop eax
-        call [bin_hex]
-        mov ebx, pte
-        mov eax, pde - pte -1
-        call [print_tty]
-        pop eax
-        call [bin_hex]
-        mov ebx, offset_page
-        mov eax, pte - offset_page -1
-        call [print_tty]
-        ret
+knewline:
+    pop ebp
+    pusha
+    call [clear_screen]
+    popa
+    push ebp
+    ret
 
-Dump_mem_loc:
-        call [dump_mem]
-        xor ecx, ecx
-        .loop:
-            pop eax
-            push ecx
-            call [bin_hex]
-            mov ebx, space
-            mov eax, Idt_init - space -1
-            call [print_tty]
-            pop ecx
-            inc ecx
-            cmp ecx, 32
-            jl .loop
-            ret
+    read_keyboard_kernel: ;you need to manually reset the counter after calling
+            cmp byte [enter_press], 1
+            je .skip
+            mov edx, [kb_offset]
+            mov ecx, [edx]
+            cmp ecx, 0
+            je .skip
+            xor ebx, ebx
+            xor eax, eax
+            mov esi, [esi_CB_stor]
+            .loop_read_keyboard:
+                movzx eax, byte [kb_start + ebx]
+                push ebx
+                push ecx
+                xor ebx, ebx
+                mov edi, [scancode]
+                movzx ebx, byte [edi +eax]
+                cmp ebx, 0x1c
+                je .enter_press_raiser
+                cmp ebx, 0x0e ;backspace
+                jne .nobackspace
+                mov eax, 0
+                call [backspace]
+                jmp .return_subrt
+                .nobackspace:
+                    mov [command_buffer +esi], ebx
+                    inc dword [esi_CB_stor]
+                    ;mov dword [var1], 0x00
+                    mov dword [var1], ebx
+                    mov ebx, var1
+                    mov eax, 0
+                    call [print_tty]
+                .return_subrt:
+                    pop ecx
+                    pop ebx
+                    inc ebx
+                    loop .loop_read_keyboard
+            .skip:
+                ret
+            .enter_press_raiser:
+                mov byte [enter_press],1 
+                call [newLine]
+                jmp .return_subrt
 
-Dump_mem_walk:
-        mov ebx, eax
-        call [page_walk]
-        pop eax
-        call [bin_hex]
-        mov ebx, pde
-        mov eax, space - pde -1
-        call [print_tty]
-        pop eax
-        and eax, 0xFFFFF000
-        call [bin_hex]
-        mov ebx, pte
-        mov eax, pde - pte -1
-        call [print_tty]
-        pop eax
-        and eax, 0xFFFFF000
-        call [bin_hex]
-        ret
+%include "debug.asm"    
+
 ;======IDT FAULT INTERRUPTS======
     exec_idt:
         Div_zero:
@@ -497,9 +445,23 @@ Dump_mem_walk:
 ;======KEYBOARD, TIMER, DISK HANDLERS======
     timer:
         pusha
-        mov ebx, Timer_msg
-        mov eax, text_end - Timer_msg -1
-        call [print_tty]
+        cmp byte [kb_used], 1
+        jne .skip
+        call read_keyboard_kernel
+        mov byte [kb_used], 0
+        mov edx, [kb_offset]
+        mov dword [edx], 0x00
+        .skip:
+        mov al, 0x20
+        out 0x20, al
+        popa
+        iret
+
+    keyboard:
+        pusha 
+        xor eax, eax
+        call [read_keyboard]
+        mov byte [kb_used], 1
         mov al, 0x20
         out 0x20, al
         popa
@@ -558,61 +520,40 @@ Dump_mem_walk:
         dd idt
 
 ;======VARIABLES, ERROR STRINGS, KEYBOARD MAP======
-    zero db '[E]0x00 Div by 0 error!'
-    debug db '[D]0x01 Debug int!'
-    nmi db '[E]0x02 Non-maskable int error!'
-    breakp db '[D]0x03 Breakpoint int'
-    overf db '[E]0x04 Integer overflow'
-    bre db '[E]0x05 Bound range exceeded'
-    inop db '[E]0x06 Invalid Opcode'
-    dna db '[D]0x07 Device not available'
-    df db '[E]0x08 Double fault'
-    cso db '[E]0x09 Coprocessor seg overrun'
-    intts db '[E]0x0A invalid TTS'
-    snp db '[E]0x0B segment not present'
-    ssf db '[E]0x0C stack-segment fault'
-    gpf db '[E]0x0D general protection fault'
-    pf db '[E]0x0E Page fault, mem acc fail'
-    reg_edi db ' edi '
-    reg_esi db ' esi '
-    reg_ebp db ' ebp '
-    reg_esp db ' esp '
-    reg_ebx db ' ebx '
-    reg_edx db ' edx '
-    reg_ecx db ' ecx '
-    reg_eax db ' eax '
-    cr_cr0  db ' cr0 '
-    cr_cr2  db ' cr2 '
-    cr_cr3  db ' cr3 '
-    cr_cr4  db ' cr4 '
-    Gdt_init db '[OK] GDT Init'
-    ram_detect db ` bytes of ram detected`
-    offset_page db ` offset `
-    pte db ` Page Table `
-    pde db ` Page Directory `
-    space db ` `
-    Idt_init db '[OK] IDT Init'
-    Timer_msg db "time tick "
-    text_end db 0x00
-
-    ;ata    
+%include "kernel_strings.asm"
+;cmd 
+            cmd_handler dd 0x00
+;kb
+            read_keyboard dd 0x00
+            kb_offset dd 0x00
+            kb_start equ 0x200000
+            kb_used db 0x00
+            var1 dd 0x00
+            enter_press db 0x00
+            scancode dd 0x00
+            esi_CB_stor dd 0x00
+            command_buffer:
+                times 128 dd 0x00 ; 512 db
+;ata    
             write_lba_28 dd 0x00
             dest dd 0x00
             read_lba_28 dd 0x00
             ata_flag db 0x00
-    ;mmu
+;mmu
             Valloc dd 0x00
             Vfree dd 0x00
-    ;debug
+;debug      
             page_walk dd 0x00
             dump_mem dd 0x00
             page_calc dd 0x00
-    ;vga driver
+;vga driver
             irq_timer equ 0x10Cc00 
             print_xy dd 0x00
             print_tty dd 0x00
             setup_xy dd 0x00
             bin_hex dd 0x00
             newLine dd 0x00
+            backspace dd 0x00
+            clear_screen dd 0x00
 
 times 50120 - ($ - $$) db 0xee

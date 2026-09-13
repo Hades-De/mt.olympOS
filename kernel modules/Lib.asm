@@ -1,17 +1,26 @@
 [org 0x10c800]
 [bits 32] 
-jmp init_lib
 
 init_lib: ;returns all the locations on the stack
     mov eax, esp ;temp save the current stack to eax
     mov esp, ebp ; get the var stack to the pos
     mov ebp, eax ;save the 'old' stack to ebp
-    mov eax, prnt_str
+    .disable_csr:
+        mov dx, 0x3D4
+        mov al, 0x0A
+        out dx, al
+        mov dx, 0x3D5
+        mov al, 0x20
+        out dx, al
+    mov eax, print_xy
     mov ebx, setup_xy
     mov ecx, print_tty
     mov edx, binary_hex
     mov esi, new_line
+    mov edi, backspace
     pusha
+    mov eax, clear_screen
+    push eax
     mov eax, esp
     mov esp, ebp
     mov ebp, eax
@@ -23,7 +32,7 @@ setup_xy: ; ecx holds the buffer loc, edx vga mode 1=non 80x25 mode, low eax hol
     mov ecx, [esp+12]
     mov edx, [esp+16]
     mov dword [vga_buffer], ecx
-    mov dword [tty_offset], 160
+    mov dword [tty_offset], 0
     cmp dx, 0
     je .setup_default ;sets the default 80*25 mode
     mov [Xmax], ax 
@@ -44,80 +53,97 @@ setup_xy: ; ecx holds the buffer loc, edx vga mode 1=non 80x25 mode, low eax hol
         mov edi, [vga_buffer]
         rep stosw
         mov ebx, init_done
-        mov ax, text_end - init_done
-        shl eax, 16
-        mov ah, 0
-        mov al, 0
-        call prnt_str
+        mov eax, text_end - init_done -1
+        call print_tty
         ret
 
-prnt_str: ;how to make the call; ebx= pointer to the string loc. eax high 16 bit = length ah = Xposition, al = YPosition (pos are starting at 0)
-    calculate_offset:
-        xor ecx, ecx
-        cmp ah, [Xmax] ;compare if its not overflowing
-        jg Invalid_pos
-        mov ch, ah
-        cmp al, [Ymax]
-        jg Invalid_pos
-        mov dl, al
-        shr eax, 16 ;now get the string length
-        mov [length], ax ;store it
-        xor eax, eax
-        mov al, dl ; now we calculate the offset (where we need to start putting the string)
-        mov cl, [Xmax] ; the math goes like this ecx= max X lines ((Ypos*ecx)+Xpos)*2 = total offset
-        mul cl ;Ypos*ecx = V
-        mov cl, ch
-        xor ch, ch
-        add eax, ecx ;V+Xpos=W
-        shl eax, 1
-        mov ecx, [vga_buffer]
-        add eax, ecx ;Q+buffer= actual location to plot
-        mov esi, eax ;finally move the end location to a variable so we can run functions with it
-        mov edx, [vga_buffer]
-        add edx, [max_size]
-        xor ecx, ecx
-    print: ;perhaps add a edi for number printing at the end (hex), actually, i already have the string length, i can just glue it after
-        cmp dword [length], ecx
-        jl .done
-        mov ah, 0x0f
-        mov al, [ebx + ecx]
-        mov word [esi + ecx*2], ax
+print_xy: ;how to make the call; ebx= pointer to the string loc. eax high 16 bit = length ah = Xposition, al = YPosition (pos are starting at 0)
+    check_valid_pos:;leave ebx be for the print call
+        mov ecx, eax
+        mov edx, eax
+        shr ecx, 16; get length
         inc ecx
-        lea eax, [esi + ecx*2]
-        cmp eax, edx
-        jge Invalid_pos
+        add ah, cl
+        check_x:
+            cmp ah, [Xmax] ; if its >= then we subtract 80, check again and add one to al
+            jae Y_inc
+        check_y:
+            cmp al, [Ymax] ; if its > then we wrap it around to 0, x. 
+            jg reset_tty
+        sub ah, cl ; return the original adress
+        jmp calculate_offset_xy
+        Y_inc:
+            sub ah, [Xmax]
+            inc al
+            jmp check_x
+        reset_tty:
+            mov al, 0
+            jmp check_y
+    
+    calculate_offset_xy:
+        xor eax, eax
+        mov al, dl
+        movzx edi, byte [Xmax]
+        push edx
+        mul edi
+        pop edx
+        shr dx, 8
+        add ax, dx
+        shl eax, 1
+        mov esi, [vga_buffer]
+        add esi, eax
+    ;now esi has the location, ebx still has the string, and ecx still has the string length
         jmp print
-        .done:
-            mov dword [length], 0
-            xor edi, edi
+     
+    print: ;ecx =total length, ebx = string location, esi contains the location of the xy or tty, caller is expected to set these
+        xor edx, edx
+        .loop_print:
+            mov ah, 0x0f
+            mov al, [ebx + edx]
+            mov word [esi + edx*2], ax
+            inc edx
+            loop .loop_print
             ret
-    Invalid_pos:
-        mov ebx, invalid_location
-        mov ax, init_done - invalid_location -1
-        shl eax, 16
-        xor ax, ax ; since that would be 0,0
-        jmp calculate_offset
 
 print_tty: ;prints to the screen using tty. ebx string loc, and eax string length
-    mov edx, [vga_buffer]
-    add edx, [max_size]
-    mov [length], eax  
     inc eax
-    mov ecx, [tty_offset]
-    add ecx, eax 
-    cmp ecx, [max_size] ;checks if it overextends
-    jge .reset_tty
-    mov esi, [vga_buffer]
-    add esi, [tty_offset]
+    mov ecx, eax
     shl eax, 1
-    add dword [tty_offset], eax
-    mov ecx, [tty_offset]
-    xor ecx, ecx
-    call print
-    ret
+    ;ebx and ecx are set now, so dont touch
+    set_compare_esi:
+        mov edi, [vga_buffer]
+        add edi, [max_size]
+        mov esi, [vga_buffer]
+        add esi, [tty_offset]
+        add esi, eax
+        cmp esi, edi
+        jg .reset_tty
+        sub esi, eax
+        add dword [tty_offset], eax
+    ;now that we set and compared esi to make sure its safe, lets print it
+    jmp print
     .reset_tty:
         mov dword [tty_offset], 0
-        jmp print_tty
+        jmp set_compare_esi
+
+backspace:
+    cmp dword [tty_offset], 0
+    je .done
+    sub dword [tty_offset], 2
+    mov esi, [vga_buffer]
+    add esi, [tty_offset]
+    mov ax, 0x0000     ; white space
+    mov [esi], ax
+    .done:
+        ret
+
+clear_screen:
+    mov ecx, [max_size]
+    xor ax, ax
+    mov edi, [vga_buffer]
+    rep stosb
+    mov dword [tty_offset], 0
+    ret
 
 new_line:
     xor ecx, ecx

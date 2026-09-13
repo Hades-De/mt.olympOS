@@ -15,7 +15,7 @@ init_system_memory:
     mov dword [PFunalloc], ebx
     push eax
     call MMC
-    mov ecx, 271
+    mov ecx, 280 ;up to 0x117000
     .alloc_1mb:
         push ecx
         call [PFalloc]

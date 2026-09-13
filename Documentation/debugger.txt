@@ -1,0 +1,26 @@
+Debugger documentation
+
+Location:
+[/"kernel/debug.asm]
+
+Last updated
+yyyy/mm/dd
+[2026/09/11]
+
+Overview:
+its a simple runtime debugger for my kernel
+exit codes:
+0x-gen IDT fault
+1x-mem failure, see units place for reason (and mmu driver)
+2x-string fault
+3x-
+4x-
+5x-
+Registers used:
+all, since its a debugger
+
+Known issues:
+
+Planned:
+lexical debugging due to the start of a simple CLI
+maybe add a bitfield for IDT's saying what they want to display as info
