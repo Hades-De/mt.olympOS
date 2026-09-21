@@ -104,7 +104,7 @@ Dump_mem_loc:
             jl .loop
             ret
 
-Dump_mem_walk:
+Dump_mem_walk: ; shows the location of each page part
         mov ebx, eax
         call [page_walk]
         pop eax

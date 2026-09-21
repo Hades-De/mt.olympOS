@@ -1,7 +1,7 @@
 Debugger documentation
 
 Location:
-[/"kernel/debug.asm]
+[/kernel/debug.asm]
 
 Last updated
 yyyy/mm/dd

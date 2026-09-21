@@ -1,0 +1,44 @@
+standard kernel func interrupt documentation
+
+Location:
+[/kernel/int_80.asm]
+
+Last updated
+yyyy/mm/dd
+[2026/09/20]
+
+Overview:
+eax = function
+ebx = arg 1
+ecx = arg 2
+edx = arg 3
+esi = arg 4
+edi = arg 5
+;all other args are on the stack, but i dont expect to use them
+
+errors:
+are returned in eax
+
+Known issues:
+
+Planned:
+
+functions (can be copied to files)
+;screen 0-5; arg 1= string, arg2 = length/pos
+    sys_print_tty equ 0x00
+    sys_print_xy equ 0x01
+    sys_print_new_line equ 0x02
+    sys_print_reg_2_display equ 0x03
+    sys_print_clear_screen equ 0x04
+    sys_print_backspace equ 0x05
+;debug 6-9
+    sys_debug_regs equ 0x06
+    sys_debug_page_info equ 0x07
+    sys_debug_dump_mem equ 0x08
+    sys_debug_page_regs equ 0x09
+;ata a-b ; arg1 = sectorcnt arg2 =lba arg3 dest
+    sys_ata_write equ 0x0a
+    sys_ata_read equ 0x0b
+;mmu c-d ;arg1=loc arg 2= kb am
+    sys_mmu_valloc equ 0x0c
+    sys_mmu_vfree equ 0x0d

@@ -1,4 +1,4 @@
 dump_command:
-    pusha
-    call [Dump_regs]
+    mov eax, 0x06
+    int 0x80
     jmp return_kernel

@@ -82,12 +82,6 @@ cli
     cmd_init:
         mov eax, command_buffer
         mov ebx, esi_CB_stor
-        mov edx, Dump_regs
-        mov edi, kprint
-        mov esi, knewline
-        push esi
-        push edi
-        push edx
         push ebx
         push eax
         call 0x10ee00
@@ -156,6 +150,10 @@ cli
         mov edi, 0x0E
         mov eax, Page_fault
         call make_idt_entry
+        ;kernel int
+        mov edi, 0x80
+        mov eax, kernel_function_vector
+        call make_idt_entry
         PIC_unmask:
             ; Send ICW1 (initialize PICs)
             mov al, 0x11
@@ -204,11 +202,6 @@ cli
     lidt [idt_ptr]
     sti
     init_list: 
-        mov ebx, 'NoMM'
-        mov dword [debug_exit_code_var], ebx
-        mov ebx, '0x10'
-        mov dword [debug_source_var], ebx
-        call debug_function
         call [newLine]
         ;int 0x01
     Kernel_loop:
@@ -225,23 +218,6 @@ cli
                 mov dword [edx], 0
         jmp Kernel_loop
 ;0010ce5c
-
-kprint:; first thing on the stack is the str_length,second is pointer to the string
-    pop ebp
-    pop eax
-    pop ebx
-    call [print_tty]
-    call [newLine]
-    push ebp
-    ret
-
-knewline:
-    pop ebp
-    pusha
-    call [clear_screen]
-    popa
-    push ebp
-    ret
 
     read_keyboard_kernel: ;you need to manually reset the counter after calling
             cmp byte [enter_press], 1
@@ -496,6 +472,9 @@ knewline:
             out 0x20, al
             popa
             iret
+
+    kernel_function_vector:
+        %include "int_80.asm"
 
 ; eax = handler address
 ; edi = index

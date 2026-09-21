@@ -4,14 +4,8 @@ init:; command buffer input and output the handler
     pop ebp
     pop eax
     pop ebx
-    pop edx
-    pop edi
-    pop esi
     mov dword [command_buffer], eax
     mov dword [esi_CB_stor], ebx
-    mov dword [Dump_regs], edx
-    mov dword [print], edi
-    mov dword [clear_scr], esi
     mov eax, handle_enter
     push eax
     push ebp
@@ -39,11 +33,10 @@ init:; command buffer input and output the handler
                 add ebx, 4
                 jmp .loop_find_command
                 no_command:
-                    mov eax, Dump_regs-NCM -1
+                    mov ecx, Dump_regs-NCM -1
                     mov ebx, NCM
-                    push ebx
-                    push eax
-                    call [print]
+                    xor eax, eax
+                    int 0x80
                 return_kernel:
                     mov ecx, [esi_CB_stor]
                     mov edx, [command_buffer]
@@ -66,9 +59,7 @@ init:; command buffer input and output the handler
                     jmp [eax]
 
 NCM db "No command found!"
-Dump_regs dd 0x00
-clear_scr dd 0x00
-print dd 0x00
+Dump_regs db 0
 esi_CB_stor dd 0x00
 command_buffer dd 0x00
 command_timeout equ 256
@@ -79,6 +70,5 @@ command_timeout equ 256
 handler:
 dd dump_command
 dd clear_command
-dd lover_command
 
 times 512 - ($ - $$) db 0
